@@ -1,0 +1,1 @@
+scp ./builds/server-arm64 ipcam:/home/piirakkamera/opt/bin/
