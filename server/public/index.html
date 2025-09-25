@@ -1,93 +1,84 @@
 <!DOCTYPE html>
 <html>
+
 <head>
-<meta charset="UTF-8">
-<title>Pi Camera WebRTC</title>
+  <meta charset="UTF-8">
+  <title>Pi Camera WebRTC</title>
 </head>
+
 <body>
-<h1>Pi Camera Stream</h1>
-<video id="video" autoplay playsinline muted style="width:640px; height:480px;"></video>
-<script>
-const video = document.getElementById("video");
+  <h1>Pi Camera Stream</h1>
+  <video id="video" autoplay playsinline muted style="width:640px; height:480px;"></video>
 
-// Create RTCPeerConnection with minimal configuration to ensure ICE works
-const pc = new RTCPeerConnection({
-    iceServers: [
-        { urls: 'stun:stun.l.google.com:19302' } // Just one STUN server for ICE initialization
-    ]
-});
+  <script>
+    const video = document.getElementById("video");
 
-// Handle remote track
-pc.ontrack = (event) => {
-    console.log("Track received", event.streams[0]);
-    video.srcObject = event.streams[0];
-};
+    // Use WSS if served via HTTPS
+    const wsScheme = location.protocol === "https:" ? "wss" : "ws";
+    const ws = new WebSocket(`${wsScheme}://${location.hostname}/ws`);
 
-// Logging connection state
-pc.onconnectionstatechange = () => console.log("PeerConnection state:", pc.connectionState);
-pc.oniceconnectionstatechange = () => console.log("ICE connection state:", pc.iceConnectionState);
-pc.onicegatheringstatechange = () => console.log("ICE gathering state:", pc.iceGatheringState);
+    const pc = new RTCPeerConnection({
+      iceServers: [{ urls: 'stun:stun.l.google.com:19302' }]
+    });
 
-// Collect local ICE candidates
-pc.onicecandidate = (event) => {
-    if (event.candidate) {
-        console.log("Local ICE candidate:", event.candidate);
+    // Receive remote video track
+    pc.ontrack = (event) => {
+      video.srcObject = event.streams[0];
+      console.log("Remote track received");
+    };
+
+    // Log connection and ICE states
+    pc.onconnectionstatechange = () => console.log("PeerConnection state:", pc.connectionState);
+    pc.oniceconnectionstatechange = () => console.log("ICE connection state:", pc.iceConnectionState);
+
+    // Send local ICE candidates to server
+    pc.onicecandidate = (event) => {
+      if (event.candidate) {
         ws.send(JSON.stringify({ candidate: event.candidate }));
-    }
-};
+        console.log("Sent ICE candidate:", event.candidate);
+      }
+    };
 
-// Connect to WebSocket signaling server
-const ws = new WebSocket(`ws://${location.hostname}:8765/ws`);
-
-ws.onopen = async () => {
-    console.log("WebSocket connected");
-    
-    try {
-        // Create SDP offer with explicit options
-        const offer = await pc.createOffer({
-            offerToReceiveVideo: true,
-            offerToReceiveAudio: false
-        });
-        
-        console.log("Created offer:", offer);
+    // When WebSocket opens, create an offer to receive video
+    ws.onopen = async () => {
+      try {
+        const offer = await pc.createOffer({ offerToReceiveVideo: true });
         await pc.setLocalDescription(offer);
-        console.log("Set local description");
-        
-        // Wait a moment for ICE gathering to start, then send
-        setTimeout(() => {
-            console.log("Sending offer to server...");
-            ws.send(JSON.stringify({ sdp: pc.localDescription }));
-            console.log("Sent SDP offer to server");
-        }, 100);
-        
-    } catch (error) {
-        console.error("Error in offer creation:", error);
-    }
-};
 
-ws.onmessage = async (msg) => {
-    const data = JSON.parse(msg.data);
-    console.log("WebSocket message received:", data);
-
-    // Handle SDP answer from server
-    if (data.sdp) {
-        const desc = new RTCSessionDescription(data.sdp);
-        await pc.setRemoteDescription(desc);
-        console.log("Remote description set:", desc.type);
-    }
-    // Handle remote ICE candidates
-    else if (data.candidate) {
-        try {
-            await pc.addIceCandidate(data.candidate);
-            console.log("Added remote ICE candidate:", data.candidate);
-        } catch (err) {
-            console.warn("ICE candidate error:", err);
+        // Wait for ICE gathering to complete before sending SDP
+        if (pc.iceGatheringState === "complete") {
+          ws.send(JSON.stringify({ sdp: pc.localDescription }));
+        } else {
+          pc.onicegatheringstatechange = () => {
+            if (pc.iceGatheringState === "complete") {
+              ws.send(JSON.stringify({ sdp: pc.localDescription }));
+            }
+          };
         }
-    }
-};
+      } catch (err) {
+        console.error("Error creating offer:", err);
+      }
+    };
 
-ws.onclose = () => console.log("WebSocket closed");
-ws.onerror = (err) => console.error("WebSocket error:", err);
-</script>
+    // Handle SDP answer and remote ICE candidates from server
+    ws.onmessage = async (msg) => {
+      const data = JSON.parse(msg.data);
+      if (data.sdp) {
+        await pc.setRemoteDescription(new RTCSessionDescription(data.sdp));
+        console.log("Remote description set:", data.sdp.type);
+      } else if (data.candidate) {
+        try {
+          await pc.addIceCandidate(data.candidate);
+          console.log("Added remote ICE candidate:", data.candidate);
+        } catch (err) {
+          console.warn("ICE candidate error:", err);
+        }
+      }
+    };
+
+    ws.onclose = () => console.log("WebSocket closed");
+    ws.onerror = (err) => console.error("WebSocket error:", err);
+  </script>
 </body>
+
 </html>
