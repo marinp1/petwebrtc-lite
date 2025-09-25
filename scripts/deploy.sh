@@ -1,1 +1,1 @@
-scp ./builds/server-arm64 ipcam:~/opt/bin/
+scp ./builds/server-arm64 ipcam:~/opt/bin/ipcam
