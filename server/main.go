@@ -1,66 +1,65 @@
 package main
 
 import (
+	"embed"
 	"fmt"
+	"io/fs"
 	"log"
 	"net/http"
+	"os"
 	"os/exec"
 	"path/filepath"
 )
 
+//go:embed public/*
+var publicFS embed.FS
+
 const (
-	hlsDir      = "./hls"       // HLS segments directory
-	playlist    = "stream.m3u8" // playlist filename
-	segmentTime = 1             // HLS segment length in seconds
+	hlsDir      = "./hls"
+	playlist    = "stream.m3u8"
+	segmentTime = 1 // HLS segment length in seconds
 )
 
 func startHLS() error {
-	// Create HLS directory if it doesn't exist
-	_, err := filepath.Abs(hlsDir)
+	absHLSDir, err := filepath.Abs(hlsDir)
 	if err != nil {
 		return err
 	}
 
-	// Run rpicam-vid piped into ffmpeg to generate HLS segments
+	// Ensure HLS directory exists
+	if err := os.MkdirAll(absHLSDir, 0755); err != nil {
+		return err
+	}
+
+	// rpicam-vid -> ffmpeg HLS pipeline
 	cmd := exec.Command("bash", "-c",
 		fmt.Sprintf(
-			`rpicam-vid -t 0 --codec h264 --nopreview -o - | ffmpeg -i - -c copy -f hls -hls_time %d -hls_list_size 5 -hls_flags delete_segments %s/%s`,
-			segmentTime, hlsDir, playlist,
+			`rpicam-vid -t 0 --codec h264 --nopreview -o - | ffmpeg -f h264 -i - -c copy -f hls -hls_time %d -hls_list_size 5 -hls_flags delete_segments+append_list %s/%s`,
+			segmentTime, absHLSDir, playlist,
 		),
 	)
 
-	// Optional: redirect stderr for debugging
+	// Log ffmpeg output
 	cmd.Stderr = log.Writer()
 
-	return cmd.Start() // run in background
+	return cmd.Start()
 }
 
 func main() {
-	// Start HLS generation
+	// Start HLS pipeline
 	if err := startHLS(); err != nil {
 		log.Fatal("Failed to start HLS pipeline:", err)
 	}
 
-	// Serve HLS directory
+	// Serve HLS segments
 	http.Handle("/hls/", http.StripPrefix("/hls/", http.FileServer(http.Dir(hlsDir))))
 
-	// HTML page with <video> tag
-	http.HandleFunc("/", func(w http.ResponseWriter, r *http.Request) {
-		html := `
-		<!DOCTYPE html>
-		<html lang="en">
-		<head>
-			<meta charset="UTF-8">
-			<title>Pi Camera HLS Stream</title>
-		</head>
-		<body>
-			<h2>Raspberry Pi Camera HLS Stream</h2>
-			<video src="/hls/stream.m3u8" width="640" height="480" autoplay muted playsinline controls></video>
-		</body>
-		</html>`
-		w.Header().Set("Content-Type", "text/html")
-		fmt.Fprint(w, html)
-	})
+	// Serve embedded public folder at root
+	subFS, err := fs.Sub(publicFS, "public")
+	if err != nil {
+		log.Fatal(err)
+	}
+	http.Handle("/", http.FileServer(http.FS(subFS)))
 
 	fmt.Println("HLS server running on :8765")
 	log.Fatal(http.ListenAndServe(":8765", nil))
