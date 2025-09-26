@@ -1,57 +1,93 @@
 <!DOCTYPE html>
-<html lang="en">
-
-<head>
-  <meta charset="UTF-8">
-  <title>Pi Camera HLS Stream</title>
-  <style>
-    html,
-    body {
-      margin: 0;
-      padding: 0;
-      height: 100%;
-      background: black;
-      display: flex;
-      justify-content: center;
-      align-items: center;
-    }
-
-    #video {
-      width: 100%;
-      height: 100%;
-      object-fit: contain;
-      /* preserves aspect ratio */
-      background: black;
-    }
-  </style>
-</head>
-
+<html>
 <body>
-  <video id="video" width="1920" height="1080" autoplay muted playsinline controls></video>
-  <script src="hls.js"></script>
-  <script>
-    var video = document.getElementById('video');
-    var videoSrc = '/hls/stream.m3u8';
-    if (Hls.isSupported()) {
-      const hls = new Hls({
-        liveSyncDurationCount: 3,      // keeps ~3 segments behind live
-        maxBufferLength: 30,           // max buffer in seconds
-        enableWorker: true,
-        liveBackBufferLength: 3,       // discard older segments
-      });
-      hls.loadSource('/hls/stream.m3u8');
-      hls.attachMedia(video);
-      hls.on(Hls.Events.MANIFEST_PARSED, () => video.play());
-    } else if (video.canPlayType('application/vnd.apple.mpegurl')) {
-      // Safari
-      video.src = videoSrc;
-      video.addEventListener('loadedmetadata', function () {
-        video.play();
-      });
-    } else {
-      alert('HLS not supported in this browser');
-    }
-  </script>
-</body>
+<video id="video" autoplay playsinline controls></video>
+<div id="status">Connecting...</div>
+<script>
+async function start() {
+  const pc = new RTCPeerConnection({
+    iceServers: [
+      { urls: "stun:stun.l.google.com:19302" }
+    ]
+  });
 
+  // Add a video transceiver to trigger ICE gathering and SDP media section
+  pc.addTransceiver("video", { direction: "recvonly" });
+
+  // Log all ICE candidates
+  pc.onicecandidate = (event) => {
+    console.log("ICE candidate:", event.candidate);
+  };
+
+  // Show the remote video stream
+  pc.ontrack = (event) => {
+    console.log("Received remote track", event);
+    if (event.streams && event.streams[0]) {
+      document.getElementById("video").srcObject = event.streams[0];
+      console.log("Set video srcObject", event.streams[0]);
+    } else {
+      console.warn("No streams in ontrack event", event);
+    }
+    document.getElementById("status").textContent = "Connected!";
+  };
+
+  // Monitor connection state
+  pc.onconnectionstatechange = () => {
+    console.log("Connection state:", pc.connectionState);
+    document.getElementById("status").textContent = `Connection: ${pc.connectionState}`;
+  };
+
+  pc.oniceconnectionstatechange = () => {
+    console.log("ICE connection state:", pc.iceConnectionState);
+  };
+
+  // Log SDP offer
+  const offer = await pc.createOffer();
+  await pc.setLocalDescription(offer);
+
+  // Wait for ICE gathering to complete before sending offer (with timeout)
+  await Promise.race([
+    new Promise(resolve => {
+      if (pc.iceGatheringState === "complete") {
+        resolve();
+      } else {
+        pc.addEventListener("icegatheringstatechange", function onStateChange() {
+          if (pc.iceGatheringState === "complete") {
+            pc.removeEventListener("icegatheringstatechange", onStateChange);
+            resolve();
+          }
+        });
+      }
+    }),
+    new Promise(resolve => setTimeout(resolve, 2000)) // 2 second timeout
+  ]);
+
+  // IMPORTANT: Use pc.localDescription here, after ICE gathering
+  console.log("Offer SDP (ICE complete):\n", pc.localDescription.sdp);
+
+  // Send offer to server
+  console.log("Sending offer to server");
+  const res = await fetch("/offer", {
+    method: "POST",
+    body: JSON.stringify(pc.localDescription), // use latest localDescription here
+    headers: { "Content-Type": "application/json" },
+  });
+
+  if (!res.ok) {
+    throw new Error(`HTTP ${res.status}: ${res.statusText}`);
+  }
+
+  const answer = await res.json();
+  console.log("Received answer from server:", answer);
+  console.log("Answer SDP:\n", answer.sdp);
+  await pc.setRemoteDescription(answer);
+  console.log("Set remote description");
+}
+
+start().catch(err => {
+  console.error("Error:", err);
+  document.getElementById("status").textContent = `Error: ${err.message}`;
+});
+</script>
+</body>
 </html>
