@@ -43,6 +43,73 @@ func main() {
 	}
 	http.Handle("/", http.FileServer(http.FS(subFS)))
 
+	// Shared NALU broadcaster
+	type client struct {
+		peerConn   *webrtc.PeerConnection
+		videoTrack *webrtc.TrackLocalStaticRTP
+		packetizer rtp.Packetizer // <-- use interface, not pointer
+	}
+	clients := make(map[*client]struct{})
+	naluChan := make(chan []byte, 100)
+
+	// Start shared camera process
+	go func() {
+		cmd := exec.Command("sh", "-c",
+			"rpicam-vid -t 0 --width 1280 --height 720 --framerate 30 --inline --rotation 180 --codec h264 --nopreview -o -",
+		)
+		cmd.Stderr = os.Stderr
+		stdout, err := cmd.StdoutPipe()
+		if err != nil {
+			log.Fatal("stdout pipe error:", err)
+		}
+		if err := cmd.Start(); err != nil {
+			log.Fatal("failed to start rpicam-vid:", err)
+		}
+
+		buf := make([]byte, 4096)
+		var naluBuf []byte
+		for {
+			n, err := stdout.Read(buf)
+			if err != nil {
+				log.Println("camera stream ended:", err)
+				break
+			}
+			naluBuf = append(naluBuf, buf[:n]...)
+			for {
+				start := findNALUStart(naluBuf)
+				if start == -1 {
+					break
+				}
+				end := findNALUStart(naluBuf[start+4:])
+				if end == -1 {
+					break
+				}
+				nalu := naluBuf[start : start+4+end]
+				select {
+				case naluChan <- nalu:
+				default:
+					// Drop if buffer full
+				}
+				naluBuf = naluBuf[start+4+end:]
+			}
+		}
+	}()
+
+	// Broadcast NALUs to all clients
+	go func() {
+		for nalu := range naluChan {
+			for c := range clients {
+				// Only send if connected
+				if c.peerConn.ConnectionState() == webrtc.PeerConnectionStateConnected {
+					packets := c.packetizer.Packetize(nalu, 90000/30)
+					for _, pkt := range packets {
+						_ = c.videoTrack.WriteRTP(pkt)
+					}
+				}
+			}
+		}
+	}()
+
 	http.HandleFunc("/offer", func(w http.ResponseWriter, r *http.Request) {
 		var offer webrtc.SessionDescription
 		if err := json.NewDecoder(r.Body).Decode(&offer); err != nil {
@@ -74,6 +141,26 @@ func main() {
 			http.Error(w, "failed to add track", http.StatusInternalServerError)
 			return
 		}
+
+		ssrc := rand.Uint32()
+		packetizer := rtp.NewPacketizer(
+			1200, 96, ssrc, &codecs.H264Payloader{},
+			rtp.NewRandomSequencer(), 90000,
+		)
+
+		c := &client{peerConn, videoTrack, packetizer}
+		clients[c] = struct{}{}
+
+		peerConn.OnConnectionStateChange(func(state webrtc.PeerConnectionState) {
+			log.Printf("PeerConnection state: %v", state)
+			if state == webrtc.PeerConnectionStateDisconnected ||
+				state == webrtc.PeerConnectionStateFailed ||
+				state == webrtc.PeerConnectionStateClosed {
+				log.Println("Removing client and closing peer connection")
+				delete(clients, c)
+				peerConn.Close()
+			}
+		})
 
 		if err := peerConn.SetRemoteDescription(offer); err != nil {
 			http.Error(w, "failed to set remote description", http.StatusInternalServerError)
@@ -110,7 +197,7 @@ func main() {
 		w.Header().Set("Content-Type", "application/json")
 		_ = json.NewEncoder(w).Encode(peerConn.LocalDescription())
 
-		// Start streaming from the Raspberry Pi camera
+		// Start streaming from the Raspberry Pi camera for this client
 		go func() {
 			// Output raw H.264 to stdout
 			cmd := exec.Command("sh", "-c",
@@ -145,7 +232,7 @@ func main() {
 				n, err := stdout.Read(buf)
 				if err != nil {
 					log.Println("stream ended:", err)
-					return
+					break
 				}
 				if peerConn.ConnectionState() != webrtc.PeerConnectionStateConnected {
 					time.Sleep(time.Millisecond * 50)
@@ -171,6 +258,7 @@ func main() {
 					naluBuf = naluBuf[start+4+end:]
 				}
 			}
+			_ = cmd.Process.Kill() // Ensure camera process is stopped when done
 		}()
 	})
 
