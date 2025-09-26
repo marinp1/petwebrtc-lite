@@ -24,13 +24,35 @@ const (
 	segmentTime = 1             // HLS segment length in seconds
 )
 
+// killExistingProcesses kills all existing rpicam-vid and ffmpeg processes
+func killExistingProcesses() {
+	log.Println("Killing existing rpicam-vid and ffmpeg processes...")
+
+	// Kill rpicam-vid processes
+	if err := exec.Command("pkill", "-f", "rpicam-vid").Run(); err != nil {
+		log.Printf("No existing rpicam-vid processes found or failed to kill: %v", err)
+	} else {
+		log.Println("Killed existing rpicam-vid processes")
+	}
+
+	// Kill ffmpeg processes
+	if err := exec.Command("pkill", "-f", "ffmpeg").Run(); err != nil {
+		log.Printf("No existing ffmpeg processes found or failed to kill: %v", err)
+	} else {
+		log.Println("Killed existing ffmpeg processes")
+	}
+
+	// Give processes time to terminate
+	time.Sleep(2 * time.Second)
+}
+
 func startHLS() (*exec.Cmd, *exec.Cmd, error) {
 	exeDir, err := filepath.Abs(filepath.Dir(os.Args[0]))
 	if err != nil {
 		return nil, nil, fmt.Errorf("failed to resolve binary dir: %w", err)
 	}
-	absHLSDir := filepath.Join(exeDir, hlsSubDir)
 
+	absHLSDir := filepath.Join(exeDir, hlsSubDir)
 	if err := os.MkdirAll(absHLSDir, 0o755); err != nil {
 		return nil, nil, fmt.Errorf("failed to create HLS dir: %w", err)
 	}
@@ -38,6 +60,7 @@ func startHLS() (*exec.Cmd, *exec.Cmd, error) {
 	// rpicam-vid command
 	rpicam := exec.Command(
 		"rpicam-vid",
+		"--rotation", "180",
 		"-t", "0",
 		"--codec", "h264",
 		"--nopreview",
@@ -50,7 +73,9 @@ func startHLS() (*exec.Cmd, *exec.Cmd, error) {
 		"-fflags", "+genpts",
 		"-f", "h264",
 		"-i", "pipe:0",
-		"-c:v", "copy",
+		"-vf", "drawtext=text='%{localtime}':fontcolor=white:fontsize=24:box=1:boxcolor=black@0.5:x=10:y=10",
+		"-c:v", "libx264",
+		"-preset", "ultrafast",
 		"-f", "hls",
 		"-hls_time", fmt.Sprint(segmentTime),
 		"-hls_list_size", "5",
@@ -81,6 +106,9 @@ func startHLS() (*exec.Cmd, *exec.Cmd, error) {
 }
 
 func main() {
+	// Kill any existing processes first
+	killExistingProcesses()
+
 	// Start HLS pipeline
 	rpicam, ffmpeg, err := startHLS()
 	if err != nil {
@@ -103,6 +131,7 @@ func main() {
 	// Graceful shutdown on SIGINT/SIGTERM
 	stop := make(chan os.Signal, 1)
 	signal.Notify(stop, os.Interrupt, syscall.SIGTERM)
+
 	go func() {
 		<-stop
 		log.Println("Shutting down server and stopping HLS processes...")
