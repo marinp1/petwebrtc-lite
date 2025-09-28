@@ -146,7 +146,7 @@ func HandleOffer(w http.ResponseWriter, r *http.Request, api *webrtc.API, cm *Cl
 	log.Printf("Received offer SDP:\n%s", offer.SDP)
 
 	peerConn, err := api.NewPeerConnection(webrtc.Configuration{
-		ICEServers: []webrtc.ICEServer{{URLs: []string{"stun:stun.l.google.com:19302"}}},
+		ICEServers: []webrtc.ICEServer{},
 	})
 	if err != nil {
 		http.Error(w, "failed to create peer connection", http.StatusInternalServerError)
