@@ -1,8 +1,6 @@
 package main
 
 import (
-	"embed"
-	"io/fs"
 	"log"
 	"net/http"
 
@@ -12,20 +10,11 @@ import (
 	"webrtc-ipcam/internal"
 )
 
-//go:embed public/*
-var publicFS embed.FS
-
 func main() {
 	conf := config.ParseFlags()
 
 	m := internal.SetupMediaEngine()
 	api := webrtc.NewAPI(webrtc.WithMediaEngine(m))
-
-	subFS, err := fs.Sub(publicFS, "public")
-	if err != nil {
-		log.Fatal(err)
-	}
-	http.Handle("/", http.FileServer(http.FS(subFS)))
 
 	clients := internal.NewClientManager()
 
