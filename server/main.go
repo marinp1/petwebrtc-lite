@@ -1,6 +1,7 @@
 package main
 
 import (
+	"fmt"
 	"log"
 	"net/http"
 
@@ -11,7 +12,8 @@ import (
 )
 
 func main() {
-	conf := config.ParseFlags()
+	// Load config from file (default: config/server.conf)
+	conf := config.ParseConfig("config/server.conf")
 
 	m := internal.SetupMediaEngine()
 	api := webrtc.NewAPI(webrtc.WithMediaEngine(m))
@@ -25,6 +27,7 @@ func main() {
 		internal.HandleOffer(w, r, api, clients, conf)
 	})
 
-	log.Printf("WebRTC server running on %s", conf.Addr)
-	log.Fatal(http.ListenAndServe(conf.Addr, nil))
+	port := fmt.Sprintf(":%d", conf.Addr)
+	log.Printf("WebRTC server running on %s", port)
+	log.Fatal(http.ListenAndServe(port, nil))
 }

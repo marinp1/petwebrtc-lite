@@ -1,48 +1,82 @@
 package config
 
 import (
-	"flag"
+	"bufio"
 	"fmt"
+	"os"
+	"strconv"
+	"strings"
 )
 
 type ServerConfig struct {
-	Addr      string
+	Addr      int
 	CameraCmd string
 	Width     int
 	Height    int
 	Framerate int
 	Rotation  int
-	Codec     string
-	Preview   bool
 }
 
-func ParseFlags() *ServerConfig {
-	addr := flag.String("addr", ":8765", "HTTP server address")
-	width := flag.Int("width", 1280, "Camera width")
-	height := flag.Int("height", 720, "Camera height")
-	framerate := flag.Int("framerate", 30, "Camera framerate")
-	rotation := flag.Int("rotation", 180, "Camera rotation")
-	codec := flag.String("codec", "h264", "Camera codec")
-	preview := flag.Bool("preview", false, "Show camera preview")
-	flag.Parse()
-
-	nopreview := ""
-	if !*preview {
-		nopreview = " --nopreview"
+// ParseConfig loads configuration from the given file path (TOML-like, key=value per line).
+// If camera_cmd is not set, it is auto-generated from width, height, framerate, and rotation.
+func ParseConfig(path string) *ServerConfig {
+	// Defaults
+	conf := &ServerConfig{
+		Addr:      8765,
+		Width:     1280,
+		Height:    720,
+		Framerate: 30,
+		Rotation:  180,
 	}
-	cmd := fmt.Sprintf(
-		"rpicam-vid -t 0 --width %d --height %d --framerate %d --inline --rotation %d --codec %s%s -o -",
-		*width, *height, *framerate, *rotation, *codec, nopreview,
-	)
 
-	return &ServerConfig{
-		Addr:      *addr,
-		CameraCmd: cmd,
-		Width:     *width,
-		Height:    *height,
-		Framerate: *framerate,
-		Rotation:  *rotation,
-		Codec:     *codec,
-		Preview:   *preview,
+	f, err := os.Open(path)
+	if err == nil {
+		defer f.Close()
+		scanner := bufio.NewScanner(f)
+		for scanner.Scan() {
+			line := strings.TrimSpace(scanner.Text())
+			if line == "" || strings.HasPrefix(line, "#") {
+				continue
+			}
+			parts := strings.SplitN(line, "=", 2)
+			if len(parts) != 2 {
+				continue
+			}
+			key := strings.TrimSpace(parts[0])
+			val := strings.TrimSpace(parts[1])
+			switch key {
+			case "addr":
+				if v, err := strconv.Atoi(val); err == nil {
+					conf.Addr = v
+				}
+			case "width":
+				if v, err := strconv.Atoi(val); err == nil {
+					conf.Width = v
+				}
+			case "height":
+				if v, err := strconv.Atoi(val); err == nil {
+					conf.Height = v
+				}
+			case "framerate":
+				if v, err := strconv.Atoi(val); err == nil {
+					conf.Framerate = v
+				}
+			case "rotation":
+				if v, err := strconv.Atoi(val); err == nil {
+					conf.Rotation = v
+				}
+			case "camera_cmd":
+				conf.CameraCmd = strings.Trim(val, "\"")
+			}
+		}
 	}
+
+	// Auto-generate camera command if not set
+	if conf.CameraCmd == "" {
+		conf.CameraCmd = fmt.Sprintf(
+			"rpicam-vid -t 0 --width %d --height %d --framerate %d --inline --rotation %d --codec h264 --nopreview -o -",
+			conf.Width, conf.Height, conf.Framerate, conf.Rotation,
+		)
+	}
+	return conf
 }
