@@ -12,7 +12,7 @@
 //   - WebRTC signaling: Handles SDP offers/answers and ICE negotiation.
 //   - RTP packetization: Converts H264 NALUs to RTP packets for WebRTC transport.
 //
-// Dependencies: Pion WebRTC, Pion RTP, ffmpeg or rpicam-vid for camera streaming.
+// Dependencies: Pion WebRTC, Pion RTP, rpicam-vid for camera streaming.
 package internal
 
 import (
@@ -57,11 +57,10 @@ func NewClientManager() *ClientManager {
 	}
 }
 
-// StartCamera launches the camera streaming process (e.g., ffmpeg or rpicam-vid) using the provided shell command.
+// StartCamera launches the camera streaming process (e.g. rpicam-vid) using the provided shell command.
 // It reads H264 NAL units from the process's stdout and sends them to the NALU channel for broadcasting.
 func (cm *ClientManager) StartCamera(cameraCmd string) {
-	// Kill any running ffmpeg or rpicam-vid processes before starting
-	_ = exec.Command("pkill", "-9", "ffmpeg").Run()
+	// Kill any running or rpicam-vid processes before starting
 	_ = exec.Command("pkill", "-9", "rpicam-vid").Run()
 
 	cmd := exec.Command("sh", "-c", cameraCmd)

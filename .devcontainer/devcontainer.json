@@ -12,7 +12,8 @@
         "vscode": {
             "settings": {},
             "extensions": [
-                "golang.go"
+                "golang.go",
+                "ms-vscode.live-server"
             ]
         }
     }
