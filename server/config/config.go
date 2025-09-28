@@ -23,8 +23,8 @@ func ParseConfig(path string) *ServerConfig {
 	// Defaults
 	conf := &ServerConfig{
 		Addr:      8765,
-		Width:     1280,
-		Height:    720,
+		Width:     1920,
+		Height:    1080,
 		Framerate: 30,
 		Rotation:  180,
 	}

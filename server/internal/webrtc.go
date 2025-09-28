@@ -53,7 +53,7 @@ type ClientManager struct {
 func NewClientManager() *ClientManager {
 	return &ClientManager{
 		Clients:  make(map[*Client]struct{}),
-		NALUChan: make(chan []byte, 100),
+		NALUChan: make(chan []byte, 1000),
 	}
 }
 
