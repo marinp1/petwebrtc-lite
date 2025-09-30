@@ -2,22 +2,32 @@
 set -euo pipefail
 #set -x
 
-APP_NAME="petwebrtc-arm64"
-REMOTE_HOST="ipcam"
-REMOTE_DIR="~/opt/bin/ipcam"
-REMOTE_PATH="$REMOTE_DIR/$APP_NAME"
-LOCAL_BUILD="./builds/$APP_NAME"
-
-# --- Check parameter ---
-if [ $# -ne 1 ]; then
-    echo "Usage: $0 deploy|deploy-start"
+# --- Require REMOTE_HOST as 2nd argument ---
+if [ $# -ne 2 ]; then
+    echo "Usage: $0 deploy|deploy-start [ipcam|ipcam2]"
     exit 1
 fi
 
 MODE="$1"
+REMOTE_HOST="$2"
+
+if [[ "$REMOTE_HOST" == "ipcam" ]]; then
+    APP_NAME="petwebrtc-arm64"
+elif [[ "$REMOTE_HOST" == "ipcam2" ]]; then
+    APP_NAME="petwebrtc-arm32"
+else
+    echo "Unknown target: $REMOTE_HOST (must be ipcam or ipcam2)"
+    exit 1
+fi
+
+REMOTE_DIR="~/opt/bin/ipcam"
+REMOTE_PATH="$REMOTE_DIR/$APP_NAME"
+LOCAL_BUILD="./builds/$APP_NAME"
+
+# --- Check mode ---
 if [[ "$MODE" != "deploy" && "$MODE" != "deploy-start" ]]; then
     echo "Invalid mode: $MODE"
-    echo "Usage: $0 deploy|deploy-start"
+    echo "Usage: $0 deploy|deploy-start [ipcam|ipcam2]"
     exit 1
 fi
 
