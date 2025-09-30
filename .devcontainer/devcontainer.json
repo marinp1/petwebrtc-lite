@@ -14,16 +14,25 @@
     "customizations": {
         // Configure properties specific to VS Code.
         "vscode": {
-            "settings": {},
+            "settings": {
+                "chat.agent.enabled": false,
+                "chat.disableAIFeatures": true,
+                "biome.lsp.bin": "./client/node_modules/@biomejs/biome/bin/biome",
+                "[typescript]": {
+                    "editor.formatOnSave": true,
+                    "editor.defaultFormatter": "biomejs.biome"
+                },
+                "[css]": {
+                    "editor.formatOnSave": true,
+                    "editor.defaultFormatter": "biomejs.biome"
+                }
+            },
             "extensions": [
                 "golang.go",
                 "ms-vscode.live-server",
                 "biomejs.biome"
             ]
         }
-    }
-    // Use 'postCreateCommand' to run commands after the container is created.
-    // "postCreateCommand": "go version",
-    // Uncomment to connect as root instead. More info: https://aka.ms/dev-containers-non-root.
-    // "remoteUser": "root"
+    },
+    "postStartCommand": "./install.sh"
 }
