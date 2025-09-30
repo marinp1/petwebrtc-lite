@@ -2,7 +2,7 @@
 set -euo pipefail
 #set -x
 
-APP_NAME="server-arm64"
+APP_NAME="petwebrtc-arm64"
 REMOTE_HOST="ipcam"
 REMOTE_DIR="~/opt/bin/ipcam"
 REMOTE_PATH="$REMOTE_DIR/$APP_NAME"

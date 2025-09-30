@@ -29,7 +29,7 @@ import (
 
 	"github.com/pion/rtp"
 	"github.com/pion/rtp/codecs"
-	"github.com/pion/webrtc/v3"
+	"github.com/pion/webrtc/v4"
 )
 
 // Client represents a single WebRTC client connection, including its peer connection,
@@ -209,8 +209,8 @@ func HandleOffer(w http.ResponseWriter, r *http.Request, api *webrtc.API, cm *Cl
 	log.Printf("Sending answer SDP:\n%s", answer.SDP)
 
 	gatherDone := make(chan struct{})
-	peerConn.OnICEGatheringStateChange(func(state webrtc.ICEGathererState) {
-		if state == webrtc.ICEGathererStateComplete {
+	peerConn.OnICEGatheringStateChange(func(state webrtc.ICEGatheringState) {
+		if state == webrtc.ICEGatheringStateComplete {
 			close(gatherDone)
 		}
 	})
