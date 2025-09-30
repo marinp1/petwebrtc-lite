@@ -53,7 +53,7 @@ type ClientManager struct {
 func NewClientManager() *ClientManager {
 	return &ClientManager{
 		Clients:  make(map[*Client]struct{}),
-		NALUChan: make(chan []byte, 100), // Lower buffer for lower latency
+		NALUChan: make(chan []byte, 500), // Increased buffer for higher throughput
 	}
 }
 
