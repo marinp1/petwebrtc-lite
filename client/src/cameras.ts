@@ -1,13 +1,13 @@
 const checkCameraStatus = async (url: string) => {
   const abortController = new AbortController();
   try {
-    const response = await Promise.race<{ ok: boolean }>([
+    const response = await Promise.race<Response>([
       fetch(url, { method: "GET", signal: abortController.signal }),
       new Promise((_, reject) =>
         setTimeout(() => reject(new Error("Timeout")), 1000),
       ),
     ]);
-    return response.ok;
+    return response.status === 200;
   } catch (error) {
     abortController.abort();
     console.debug("Error checking camera status:", error);

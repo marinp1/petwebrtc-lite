@@ -1,5 +1,7 @@
-import { getCameraCount } from "./cameras.js";
-import { startStream } from "./connect.js";
+import "./style.css";
+
+import { getCameraCount } from "./cameras";
+import { startStream } from "./connect";
 
 const cameraCount = await getCameraCount();
 console.log("Found", cameraCount, "cameras");
