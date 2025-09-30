@@ -40,6 +40,14 @@ func main() {
 	go clients.StartCamera(conf.CameraCmd)
 	go clients.BroadcastNALUs()
 
+	http.Handle("/status", enableCORS(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		// set optional headers if you want
+		w.Header().Set("Content-Type", "text/plain; charset=utf-8")
+		// write status 200 and body "OK"
+		w.WriteHeader(http.StatusOK)
+		_, _ = w.Write([]byte("OK"))
+	})))
+
 	http.Handle("/offer", enableCORS(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		internal.HandleOffer(w, r, api, clients, conf)
 	})))

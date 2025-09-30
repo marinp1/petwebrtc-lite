@@ -1,150 +1,44 @@
 <!DOCTYPE html>
 <html>
+
 <head>
-<style>
-  html, body {
-    height: 100%;
-    margin: 0;
-    padding: 0;
-    background: #000;
-    width: 100%;
-  }
-  body {
-    display: flex;
-    flex-direction: column;
-    justify-content: center;
-    align-items: center;
-    height: 100vh;
-    width: 100vw;
-    background: #000;
-  }
-  #video {
-    width: 100vw;
-    height: 100vh;
-    object-fit: contain;
-    background: #000;
-    display: block;
-  }
-  #status {
-    position: absolute;
-    top: 10px;
-    left: 0;
-    width: 100vw;
-    text-align: center;
-    color: #fff;
-    font-family: sans-serif;
-    font-size: 1.2em;
-    z-index: 10;
-    pointer-events: none;
-  }
-</style>
+  <title>PetWebRTC Cameras</title>
+  <link rel="stylesheet" href="./styles.css">
 </head>
+
 <body>
-<div style="position:fixed;top:0;left:0;width:100vw;height:100vh;background:#000;overflow:hidden;">
-  <video id="video" autoplay playsinline></video>
-  <div id="status">Connecting...</div>
-</div>
-<script>
-  var config = {
-    cameras: [
-      { name: "Camera 1", url: "/camera1" }
-    ]
-  }
-</script>
-<script>
-async function start() {
-  const pc = new RTCPeerConnection({
-    iceServers: []
-  });
-
-  let serverTimestamp = null;
-  pc.ondatachannel = (event) => {
-    if (event.channel.label === "meta") {
-      event.channel.onmessage = (msg) => {
-        serverTimestamp = msg.data;
-      };
+  <div class="container"></div>
+  <script type="module">
+    import { getCameraCount } from './cameras.js';
+    import { startStream } from './connect.js';
+    const cameraCount = await getCameraCount();
+    console.log("Found", cameraCount, "cameras");
+    const container = document.querySelector('.container');
+    // Set grid for tiling
+    if (cameraCount > 0) {
+      let cols = Math.ceil(Math.sqrt(cameraCount));
+      let rows = Math.ceil(cameraCount / cols);
+      container.style.gridTemplateColumns = `repeat(${cols}, 1fr)`;
+      container.style.gridTemplateRows = `repeat(${rows}, 1fr)`;
     }
-  };
-
-  // Add a video transceiver to trigger ICE gathering and SDP media section
-  pc.addTransceiver("video", { direction: "recvonly" });
-
-  // Log all ICE candidates
-  pc.onicecandidate = (event) => {
-    console.log("ICE candidate:", event.candidate);
-  };
-
-  pc.ontrack = (event) => {
-    console.log("Received remote track", event);
-    const video = document.getElementById("video");
-    if (event.streams && event.streams[0]) {
-      video.srcObject = event.streams[0];
-      video.onloadedmetadata = () => {
-        video.play();
-      };
-    } else {
-      console.warn("No streams in ontrack event", event);
+    // Create video elements and start streams
+    for (let i = 1; i <= cameraCount; i++) {
+      const videoElement = document.createElement('video');
+      videoElement.autoplay = true;
+      videoElement.playsInline = true;
+      videoElement.controls = true;
+      videoElement.title = `Camera ${i}`;
+      const statusElement = document.createElement('span');
+      statusElement.className = 'status';
+      const videoContainer = document.createElement('div');
+      videoContainer.className = 'videoContainer';
+      videoContainer.appendChild(videoElement);
+      videoContainer.appendChild(statusElement);
+      container.appendChild(videoContainer);
+      const url = `/camera${i}`;
+      startStream({ url, name: `Camera ${i}`, videoElement, statusElement });
     }
-    document.getElementById("status").textContent = "Connected!";
-  };
-
-  // Monitor connection state
-  pc.onconnectionstatechange = () => {
-    console.log("Connection state:", pc.connectionState);
-    document.getElementById("status").textContent = `Connection: ${pc.connectionState}`;
-  };
-
-  pc.oniceconnectionstatechange = () => {
-    console.log("ICE connection state:", pc.iceConnectionState);
-  };
-
-  // Log SDP offer
-  const offer = await pc.createOffer();
-  await pc.setLocalDescription(offer);
-
-  // Wait for ICE gathering to complete before sending offer (with timeout)
-  await Promise.race([
-    new Promise(resolve => {
-      if (pc.iceGatheringState === "complete") {
-        resolve();
-      } else {
-        pc.addEventListener("icegatheringstatechange", function onStateChange() {
-          if (pc.iceGatheringState === "complete") {
-            pc.removeEventListener("icegatheringstatechange", onStateChange);
-            resolve();
-          }
-        });
-      }
-    }),
-    new Promise(resolve => setTimeout(resolve, 2000)) // 2 second timeout
-  ]);
-
-  // IMPORTANT: Use pc.localDescription here, after ICE gathering
-  console.log("Offer SDP (ICE complete):\n", pc.localDescription.sdp);
-
-  // Send offer to server
-  console.log("Sending offer to server");
-  const res = await fetch(`${config.cameras[0].url}/offer`, {
-    method: "POST",
-    body: JSON.stringify(pc.localDescription), // use latest localDescription here
-    headers: { "Content-Type": "application/json" },
-  });
-
-  if (!res.ok) {
-    throw new Error(`HTTP ${res.status}: ${res.statusText}`);
-  }
-
-  const answer = await res.json();
-  console.log("Received answer from server:", answer);
-  console.log("Answer SDP:\n", answer.sdp);
-  await pc.setRemoteDescription(answer);
-  console.log("Set remote description");
-}
-
-start().catch(err => {
-  console.error("Error:", err);
-  document.getElementById("status").textContent = `Error: ${err.message}`;
-});
-</script>
+  </script>
 </body>
+
 </html>
