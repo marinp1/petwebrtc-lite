@@ -53,7 +53,7 @@ type ClientManager struct {
 func NewClientManager() *ClientManager {
 	return &ClientManager{
 		Clients:  make(map[*Client]struct{}),
-		NALUChan: make(chan []byte, 1000),
+		NALUChan: make(chan []byte, 100), // Lower buffer for lower latency
 	}
 }
 
@@ -93,8 +93,11 @@ func (cm *ClientManager) StartCamera(cameraCmd string) {
 			nalu := naluBuf[start : start+4+end]
 			select {
 			case cm.NALUChan <- nalu:
+				// Sent successfully
 			default:
-				// Drop if buffer full
+				// Buffer full: drop oldest and insert new
+				<-cm.NALUChan
+				cm.NALUChan <- nalu
 			}
 			naluBuf = naluBuf[start+4+end:]
 		}
@@ -105,8 +108,15 @@ func (cm *ClientManager) StartCamera(cameraCmd string) {
 // to all connected clients with an active WebRTC connection.
 func (cm *ClientManager) BroadcastNALUs() {
 	for nalu := range cm.NALUChan {
+		// Copy client list under lock
 		cm.Mu.RLock()
+		clients := make([]*Client, 0, len(cm.Clients))
 		for c := range cm.Clients {
+			clients = append(clients, c)
+		}
+		cm.Mu.RUnlock()
+		// Send RTP packets outside lock
+		for _, c := range clients {
 			if c.PeerConn.ConnectionState() == webrtc.PeerConnectionStateConnected {
 				packets := c.Packetizer.Packetize(nalu, 90000/30)
 				for _, pkt := range packets {
@@ -114,7 +124,6 @@ func (cm *ClientManager) BroadcastNALUs() {
 				}
 			}
 		}
-		cm.Mu.RUnlock()
 	}
 }
 
