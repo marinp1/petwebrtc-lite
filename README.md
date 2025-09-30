@@ -42,6 +42,40 @@ Edit `scripts/deploy.sh` to set your `REMOTE_HOST` and `REMOTE_DIR`.
 ```
 This stops any running instance, copies the binary, and starts the server in the background.
 
+### Set service
+
+Create service file `nano /etc/systemd/system/petwebrtc.service` with the following contents:
+
+```
+[Unit]
+Description=PetWebRTC Server
+After=network.target
+
+[Service]
+ExecStart=/home/<username>/opt/bin/ipcam/petwebrtc-arm<architecture>
+WorkingDirectory=/home/<username>/opt/bin/ipcam
+Restart=always
+User=<username>
+Group=<username>
+
+# Discard all logs
+StandardOutput=null
+StandardError=null
+
+[Install]
+WantedBy=multi-user.target
+```
+
+Enable the service:
+
+```bash
+sudo systemctl daemon-reload
+sudo systemctl enable petwebrtc.service
+sudo systemctl start petwebrtc.service
+# check status
+systemctl status petwebrtc.service
+```
+
 ### Web Client
 
 Open `client/index.html` in your browser. By default, it connects to `/offer` on the same host.
