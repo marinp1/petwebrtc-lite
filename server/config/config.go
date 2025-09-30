@@ -2,19 +2,18 @@ package config
 
 import (
 	"bufio"
-	"fmt"
 	"os"
 	"strconv"
 	"strings"
 )
 
 type ServerConfig struct {
-	Addr      int
-	CameraCmd string
-	Width     int
-	Height    int
-	Framerate int
-	Rotation  int
+	Addr       int
+	Width      int
+	Height     int
+	Framerate  int
+	Rotation   int
+	CorsOrigin string
 }
 
 // ParseConfig loads configuration from the given file path (TOML-like, key=value per line).
@@ -22,11 +21,12 @@ type ServerConfig struct {
 func ParseConfig(path string) *ServerConfig {
 	// Defaults
 	conf := &ServerConfig{
-		Addr:      8765,
-		Width:     1280,
-		Height:    720,
-		Framerate: 30,
-		Rotation:  180,
+		Addr:       8765,
+		Width:      1280,
+		Height:     720,
+		Framerate:  30,
+		Rotation:   180,
+		CorsOrigin: "*",
 	}
 
 	f, err := os.Open(path)
@@ -65,18 +65,11 @@ func ParseConfig(path string) *ServerConfig {
 				if v, err := strconv.Atoi(val); err == nil {
 					conf.Rotation = v
 				}
-			case "camera_cmd":
-				conf.CameraCmd = strings.Trim(val, "\"")
+			case "cors_origin":
+				conf.CorsOrigin = val
 			}
 		}
 	}
 
-	// Auto-generate camera command if not set
-	if conf.CameraCmd == "" {
-		conf.CameraCmd = fmt.Sprintf(
-			"rpicam-vid -t 0 --width %d --height %d --framerate %d --inline --rotation %d --codec h264 --nopreview -o -",
-			conf.Width, conf.Height, conf.Framerate, conf.Rotation,
-		)
-	}
 	return conf
 }
