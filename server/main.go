@@ -44,15 +44,16 @@ func main() {
 	m := internal.SetupMediaEngine()
 	api := webrtc.NewAPI(webrtc.WithMediaEngine(m))
 
-	clients := internal.NewClientManager()
+	cameraManager := internal.NewCameraManager()
+	clientManager := internal.NewClientManager()
 
 	cameraCmd := fmt.Sprintf(
 		"rpicam-vid -t 0 --width %d --height %d --framerate %d --inline --rotation %d --codec h264 --nopreview -o -",
 		conf.Width, conf.Height, conf.Framerate, conf.Rotation,
 	)
 
-	go clients.StartCamera(cameraCmd)
-	go clients.BroadcastNALUs()
+	go cameraManager.StartCamera(cameraCmd)
+	go clientManager.BroadcastNALUs(cameraManager.GetNALUChannel())
 
 	http.Handle("/status", enableCORS(conf.CorsOrigin, http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("Content-Type", "text/plain; charset=utf-8")
@@ -61,7 +62,7 @@ func main() {
 	})))
 
 	http.Handle("/offer", enableCORS(conf.CorsOrigin, http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		internal.HandleOffer(w, r, api, clients, conf)
+		internal.HandleOffer(w, r, api, clientManager, conf)
 	})))
 
 	go func() {
@@ -80,11 +81,11 @@ func main() {
 	log.Println("Shutdown signal received, cleaning up...")
 
 	// close peer connections
-	clients.Mu.Lock()
-	for c := range clients.Clients {
+	clientManager.Mu.Lock()
+	for c := range clientManager.Clients {
 		c.PeerConn.Close()
 	}
-	clients.Mu.Unlock()
+	clientManager.Mu.Unlock()
 
 	log.Println("Server shut down cleanly.")
 
