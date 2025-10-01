@@ -5,7 +5,9 @@ import (
 	"log"
 	"net/http"
 	"os"
+	"os/signal"
 	"path/filepath"
+	"syscall"
 
 	"github.com/pion/webrtc/v4"
 
@@ -62,7 +64,28 @@ func main() {
 		internal.HandleOffer(w, r, api, clients, conf)
 	})))
 
-	port := fmt.Sprintf(":%d", conf.Addr)
-	log.Printf("WebRTC server running on %s", port)
-	log.Fatal(http.ListenAndServe(port, nil))
+	go func() {
+		port := fmt.Sprintf(":%d", conf.Addr)
+		log.Printf("WebRTC server running on %s", port)
+		if err := http.ListenAndServe(port, nil); err != nil && err != http.ErrServerClosed {
+			log.Fatalf("HTTP server error: %v", err)
+		}
+	}()
+
+	// wait for shutdown signal
+	stop := make(chan os.Signal, 1)
+	signal.Notify(stop, syscall.SIGINT, syscall.SIGTERM)
+	<-stop
+
+	log.Println("Shutdown signal received, cleaning up...")
+
+	// close peer connections
+	clients.Mu.Lock()
+	for c := range clients.Clients {
+		c.PeerConn.Close()
+	}
+	clients.Mu.Unlock()
+
+	log.Println("Server shut down cleanly.")
+
 }

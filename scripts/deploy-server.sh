@@ -33,7 +33,7 @@ fi
 
 # --- Always stop remote process ---
 echo "[1/3] Stopping remote process..."
-ssh "$REMOTE_HOST" "pkill -f $APP_NAME" || true
+ssh "$REMOTE_HOST" "sudo systemctl stop petwebrtc" || true
 echo "[1/3] Remote process stopped."
 
 # --- Deploy binary ---
@@ -43,8 +43,8 @@ echo "[2/3] Deployment complete."
 
 # --- Start remote process only if deploy-start ---
 if [ "$MODE" == "deploy-start" ]; then
-    echo "[3/3] Starting remote process in background..."
-    ssh "$REMOTE_HOST" "nohup $REMOTE_PATH >/dev/null 2>&1 &"
+    echo "[3/3] Starting remote proces..."
+    ssh "$REMOTE_HOST" "sudo systemctl restart petwebrtc" || true
     echo "[3/3] Remote process started."
 else
     echo "[3/3] Skipped starting remote process."
