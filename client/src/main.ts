@@ -8,28 +8,6 @@ console.log("Found", cameraCount, "cameras");
 
 const container = document.querySelector<HTMLDivElement>(".container")!;
 
-// Function to update layout
-function updateLayout() {
-  if (cameraCount === 1) {
-    container.style.gridTemplateColumns = "1fr";
-    container.style.gridTemplateRows = "1fr";
-  } else if (cameraCount === 2) {
-    if (window.innerWidth >= window.innerHeight) {
-      // Landscape → side by side
-      container.style.gridTemplateColumns = "repeat(2, 1fr)";
-      container.style.gridTemplateRows = "1fr";
-    } else {
-      // Portrait → stacked vertically
-      container.style.gridTemplateColumns = "1fr";
-      container.style.gridTemplateRows = "repeat(2, 1fr)";
-    }
-  }
-}
-
-// Initial layout + on resize
-updateLayout();
-window.addEventListener("resize", updateLayout);
-
 // Create video elements and start streams
 for (let i = 1; i <= cameraCount; i++) {
   const videoElement = document.createElement("video");
@@ -41,8 +19,12 @@ for (let i = 1; i <= cameraCount; i++) {
   const statusElement = document.createElement("span");
   statusElement.className = "status";
 
-  const videoContainer = document.createElement("div");
+  const videoContainer = document.createElement("details");
+  if (i === 1) videoContainer.open = true;
+  const summary = document.createElement("summary");
+  summary.innerText = `Camera ${i}`;
   videoContainer.className = "videoContainer";
+  videoContainer.appendChild(summary);
   videoContainer.appendChild(videoElement);
   videoContainer.appendChild(statusElement);
   container.appendChild(videoContainer);
