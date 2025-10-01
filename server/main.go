@@ -44,7 +44,12 @@ func main() {
 	m := internal.SetupMediaEngine()
 	api := webrtc.NewAPI(webrtc.WithMediaEngine(m))
 
-	cameraManager := internal.NewCameraManager()
+	config := internal.CameraConfig{
+		ChannelBuffer: 2000,       // Handle bursts
+		ReadBuffer:    256 * 1024, // 256KB reads
+	}
+
+	cameraManager := internal.NewCameraManager(config)
 	clientManager := internal.NewClientManager()
 
 	cameraCmd := fmt.Sprintf(
