@@ -3,7 +3,10 @@ import { DetectionsSet } from "./detector";
 import type { VideoFeedConfig } from "./types";
 
 const startObjectDetection = async (videoElement: HTMLVideoElement) => {
-  const detectionList = new DetectionsSet(100, videoElement, "255,0,0");
+  const detectionLists = {
+    dog: new DetectionsSet(100, videoElement, "255,0,0"),
+    person: new DetectionsSet(100, videoElement, "0,0,255"),
+  };
   const { ObjectDetector } = await import("@mediapipe/tasks-vision");
   const vision = await FilesetResolver.forVisionTasks("./wasm");
   const objectDetector = await ObjectDetector.createFromOptions(vision, {
@@ -15,17 +18,22 @@ const startObjectDetection = async (videoElement: HTMLVideoElement) => {
     categoryAllowlist: ["person", "dog"],
   });
   let lastVideoTime = -1;
+  let lastDetectionTime = 0; // ms timestamp of last detection
+  const DETECTION_INTERVAL = 100; // ms
   function renderLoop(): void {
     if (videoElement.currentTime !== lastVideoTime) {
-      const startTimeMs = performance.now();
-      {
-        const { detections } = objectDetector.detectForVideo(
-          videoElement,
-          startTimeMs,
-        );
+      const now = performance.now();
+      if (now - lastDetectionTime >= DETECTION_INTERVAL) {
+        const { detections } = objectDetector.detectForVideo(videoElement, now);
         for (const detection of detections) {
-          detectionList.add(detection);
+          const category = detection.categories[0].categoryName;
+          if (category in detectionLists) {
+            detectionLists[category as keyof typeof detectionLists].add(
+              detection,
+            );
+          }
         }
+        lastDetectionTime = now;
         lastVideoTime = videoElement.currentTime;
       }
     }
