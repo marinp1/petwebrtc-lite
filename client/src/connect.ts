@@ -33,7 +33,6 @@ export async function startStream(videoFeedConfig: VideoFeedConfig) {
         const localeDateTime = new Date(stats.timestamp).toLocaleTimeString();
         const statsText = `${localeDateTime}, sent/dropped: ${stats.sentFrames} / ${stats.droppedFrames}`;
         dataElement.innerText = statsText;
-        console.log("Stats received:", stats);
       } catch (e) {
         console.error(`Error parsing stats:`, e);
       }

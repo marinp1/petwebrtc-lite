@@ -2,8 +2,10 @@ package internal
 
 import (
 	"encoding/json"
+	"log"
 	"math/rand"
 	"sync"
+	"sync/atomic"
 	"time"
 
 	"github.com/pion/rtp"
@@ -15,6 +17,7 @@ type Client struct {
 	PeerConn      *webrtc.PeerConnection
 	VideoTrack    *webrtc.TrackLocalStaticRTP
 	DataChannel   *webrtc.DataChannel
+	dcMu          sync.RWMutex // Protects DataChannel access
 	Packetizer    rtp.Packetizer
 	lastTimestamp uint32
 	startTime     time.Time
@@ -54,7 +57,7 @@ func (cm *ClientManager) BroadcastNALUs(naluChan <-chan []byte) {
 			case c.naluChan <- nalu:
 			default:
 				// Client can't keep up, skip frame
-				c.droppedFrames++
+				atomic.AddUint64(&c.droppedFrames, 1)
 			}
 		}
 		cm.Mu.RUnlock()
@@ -111,7 +114,10 @@ func (cm *ClientManager) AddClient(client *Client) {
 
 		for {
 			select {
-			case nalu := <-client.naluChan:
+			case nalu, ok := <-client.naluChan:
+				if !ok {
+					return
+				}
 				if client.PeerConn.ConnectionState() == webrtc.PeerConnectionStateConnected {
 					timestamp := uint32(time.Since(client.startTime).Milliseconds() * 90) // 90kHz clock
 					packets := client.Packetizer.Packetize(nalu, timestamp-client.lastTimestamp)
@@ -119,19 +125,28 @@ func (cm *ClientManager) AddClient(client *Client) {
 					for _, pkt := range packets {
 						_ = client.VideoTrack.WriteRTP(pkt)
 					}
-					client.sentFrames++
+					atomic.AddUint64(&client.sentFrames, 1)
 				}
 			case <-ticker.C:
 				// Send stats every second
-				if client.DataChannel != nil && client.DataChannel.ReadyState() == webrtc.DataChannelStateOpen {
+				client.dcMu.RLock()
+				dc := client.DataChannel
+				client.dcMu.RUnlock()
+
+				if dc != nil && dc.ReadyState() == webrtc.DataChannelStateOpen {
+					sent := atomic.LoadUint64(&client.sentFrames)
+					dropped := atomic.LoadUint64(&client.droppedFrames)
+
 					stats := FrameStats{
-						SentFrames:    client.sentFrames,
-						DroppedFrames: client.droppedFrames,
+						SentFrames:    sent,
+						DroppedFrames: dropped,
 						Timestamp:     time.Now().UnixMilli(),
 					}
 					data, err := json.Marshal(stats)
 					if err == nil {
-						_ = client.DataChannel.SendText(string(data))
+						if err := dc.SendText(string(data)); err != nil {
+							log.Printf("Error sending stats: %v", err)
+						}
 					}
 				}
 			case <-client.done:
@@ -145,7 +160,21 @@ func (cm *ClientManager) RemoveClient(client *Client) {
 	cm.Mu.Lock()
 	delete(cm.Clients, client)
 	cm.Mu.Unlock()
-	close(client.done)
+
+	// Close done channel to stop goroutine
+	select {
+	case <-client.done:
+		// Already closed
+	default:
+		close(client.done)
+	}
+}
+
+// SetDataChannel safely sets the data channel for a client
+func (c *Client) SetDataChannel(dc *webrtc.DataChannel) {
+	c.dcMu.Lock()
+	c.DataChannel = dc
+	c.dcMu.Unlock()
 }
 
 func NewClient(pc *webrtc.PeerConnection, track *webrtc.TrackLocalStaticRTP, dc *webrtc.DataChannel) *Client {
@@ -156,5 +185,13 @@ func NewClient(pc *webrtc.PeerConnection, track *webrtc.TrackLocalStaticRTP, dc 
 	)
 	naluChan := make(chan []byte, 100)
 	done := make(chan struct{})
-	return &Client{pc, track, dc, packetizer, 0, time.Now(), naluChan, done, 0, 0}
+	return &Client{
+		PeerConn:    pc,
+		VideoTrack:  track,
+		DataChannel: dc,
+		Packetizer:  packetizer,
+		startTime:   time.Now(),
+		naluChan:    naluChan,
+		done:        done,
+	}
 }

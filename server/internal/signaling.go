@@ -49,9 +49,14 @@ func HandleOffer(w http.ResponseWriter, r *http.Request, api *webrtc.API, cm *Cl
 	}
 	_, _ = peerConn.AddTrack(videoTrack)
 
+	client := NewClient(peerConn, videoTrack, nil)
+
 	// Handle incoming data channel from client
 	peerConn.OnDataChannel(func(dc *webrtc.DataChannel) {
 		log.Printf("Data channel received from client: %s", dc.Label())
+
+		// Update this specific client's data channel safely
+		client.SetDataChannel(dc)
 
 		dc.OnOpen(func() {
 			log.Println("Data channel opened")
@@ -66,13 +71,7 @@ func HandleOffer(w http.ResponseWriter, r *http.Request, api *webrtc.API, cm *Cl
 		})
 	})
 
-	client := NewClient(peerConn, videoTrack, nil) // Will be updated when data channel opens
 	cm.AddClient(client)
-
-	// Update client's data channel reference when it opens
-	peerConn.OnDataChannel(func(dc *webrtc.DataChannel) {
-		client.DataChannel = dc
-	})
 
 	peerConn.OnConnectionStateChange(func(state webrtc.PeerConnectionState) {
 		log.Printf("PeerConnection state: %v", state)
