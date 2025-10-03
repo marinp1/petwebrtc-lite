@@ -1,6 +1,7 @@
 import { FilesetResolver } from "@mediapipe/tasks-vision";
 import { DetectionsSet } from "./detector";
 import type { VideoFeedConfig } from "./types";
+import { getStorage } from "./storage";
 
 const startObjectDetection = async (videoElement: HTMLVideoElement) => {
   const detectionLists = {
@@ -101,7 +102,9 @@ export async function startStream(videoFeedConfig: VideoFeedConfig) {
         videoElement.srcObject = event.streams[0];
         videoElement.onloadedmetadata = () => {
           videoElement.play();
-          startObjectDetection(videoElement);
+          if (getStorage().recognisitionActive) {
+            startObjectDetection(videoElement);
+          }
         };
       } else {
         console.warn("No streams in ontrack event", event);

@@ -2,11 +2,25 @@ import "./style.css";
 
 import { getCameraCount } from "./cameras";
 import { startStream } from "./connect";
+import { getStorage, setStorage } from "./storage";
 
 const cameraCount = await getCameraCount();
 console.log("Found", cameraCount, "cameras");
 
 const container = document.querySelector<HTMLDivElement>(".container")!;
+const recognisitionButton = document.getElementById("recognisition-button")!;
+
+{
+  const recognisitionActive = getStorage().recognisitionActive;
+  recognisitionButton.style.display = "block";
+  recognisitionButton.innerText = `Recognize objects: ${recognisitionActive ? "enabled" : "disabled"}`;
+}
+
+recognisitionButton.onclick = (ev) => {
+  ev.preventDefault();
+  setStorage({ recognisitionActive: !getStorage().recognisitionActive });
+  window.location.reload();
+};
 
 // Create video elements and start streams
 for (let i = 1; i <= cameraCount; i++) {
