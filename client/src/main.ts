@@ -16,8 +16,11 @@ for (let i = 1; i <= cameraCount; i++) {
   videoElement.controls = true;
   videoElement.title = `Camera ${i}`;
 
-  const statusElement = document.createElement("span");
-  statusElement.className = "status";
+  const statusContainer = document.createElement("div");
+  statusContainer.className = "status";
+  const connectionElement = document.createElement("span");
+  const dataElement = document.createElement("span");
+  statusContainer.append(connectionElement, dataElement);
 
   const videoContainer = document.createElement("details");
   if (i === 1) videoContainer.open = true;
@@ -26,9 +29,15 @@ for (let i = 1; i <= cameraCount; i++) {
   videoContainer.className = "videoContainer";
   videoContainer.appendChild(summary);
   videoContainer.appendChild(videoElement);
-  videoContainer.appendChild(statusElement);
+  videoContainer.appendChild(statusContainer);
   container.appendChild(videoContainer);
 
   const url = `/camera${i}`;
-  startStream({ url, name: `Camera ${i}`, videoElement, statusElement });
+  startStream({
+    url,
+    name: `Camera ${i}`,
+    videoElement,
+    connectionElement,
+    dataElement,
+  });
 }

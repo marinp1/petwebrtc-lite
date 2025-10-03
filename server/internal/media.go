@@ -1,6 +1,7 @@
 package internal
 
 import (
+	"encoding/json"
 	"math/rand"
 	"sync"
 	"time"
@@ -13,11 +14,14 @@ import (
 type Client struct {
 	PeerConn      *webrtc.PeerConnection
 	VideoTrack    *webrtc.TrackLocalStaticRTP
+	DataChannel   *webrtc.DataChannel
 	Packetizer    rtp.Packetizer
 	lastTimestamp uint32
 	startTime     time.Time
 	naluChan      chan []byte
 	done          chan struct{}
+	sentFrames    uint64
+	droppedFrames uint64
 }
 
 type ClientManager struct {
@@ -26,6 +30,12 @@ type ClientManager struct {
 	lastKeyframe []byte
 	lastSPS      []byte
 	lastPPS      []byte
+}
+
+type FrameStats struct {
+	SentFrames    uint64 `json:"sentFrames"`
+	DroppedFrames uint64 `json:"droppedFrames"`
+	Timestamp     int64  `json:"timestamp"`
 }
 
 func NewClientManager() *ClientManager {
@@ -44,6 +54,7 @@ func (cm *ClientManager) BroadcastNALUs(naluChan <-chan []byte) {
 			case c.naluChan <- nalu:
 			default:
 				// Client can't keep up, skip frame
+				c.droppedFrames++
 			}
 		}
 		cm.Mu.RUnlock()
@@ -73,8 +84,6 @@ func (cm *ClientManager) AddClient(client *Client) {
 	cm.Clients[client] = struct{}{}
 	cm.Mu.Unlock()
 
-	cm.Clients[client] = struct{}{}
-
 	// Send cached keyframes immediately
 	if cm.lastSPS != nil {
 		packets := client.Packetizer.Packetize(cm.lastSPS, 0)
@@ -97,6 +106,9 @@ func (cm *ClientManager) AddClient(client *Client) {
 
 	// Start per-client sender goroutine
 	go func() {
+		ticker := time.NewTicker(1 * time.Second)
+		defer ticker.Stop()
+
 		for {
 			select {
 			case nalu := <-client.naluChan:
@@ -106,6 +118,20 @@ func (cm *ClientManager) AddClient(client *Client) {
 					client.lastTimestamp = timestamp
 					for _, pkt := range packets {
 						_ = client.VideoTrack.WriteRTP(pkt)
+					}
+					client.sentFrames++
+				}
+			case <-ticker.C:
+				// Send stats every second
+				if client.DataChannel != nil && client.DataChannel.ReadyState() == webrtc.DataChannelStateOpen {
+					stats := FrameStats{
+						SentFrames:    client.sentFrames,
+						DroppedFrames: client.droppedFrames,
+						Timestamp:     time.Now().UnixMilli(),
+					}
+					data, err := json.Marshal(stats)
+					if err == nil {
+						_ = client.DataChannel.SendText(string(data))
 					}
 				}
 			case <-client.done:
@@ -119,9 +145,10 @@ func (cm *ClientManager) RemoveClient(client *Client) {
 	cm.Mu.Lock()
 	delete(cm.Clients, client)
 	cm.Mu.Unlock()
+	close(client.done)
 }
 
-func NewClient(pc *webrtc.PeerConnection, track *webrtc.TrackLocalStaticRTP) *Client {
+func NewClient(pc *webrtc.PeerConnection, track *webrtc.TrackLocalStaticRTP, dc *webrtc.DataChannel) *Client {
 	ssrc := rand.Uint32()
 	packetizer := rtp.NewPacketizer(
 		1200, 96, ssrc, &codecs.H264Payloader{},
@@ -129,5 +156,5 @@ func NewClient(pc *webrtc.PeerConnection, track *webrtc.TrackLocalStaticRTP) *Cl
 	)
 	naluChan := make(chan []byte, 100)
 	done := make(chan struct{})
-	return &Client{pc, track, packetizer, 0, time.Now(), naluChan, done}
+	return &Client{pc, track, dc, packetizer, 0, time.Now(), naluChan, done, 0, 0}
 }

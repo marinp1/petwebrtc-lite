@@ -5,7 +5,7 @@ import type { VideoFeedConfig } from "./types";
  * Sets up a RTCPeerConnection, handles ICE candidates, and manages the video element.
  */
 export async function startStream(videoFeedConfig: VideoFeedConfig) {
-  const { url, videoElement, statusElement } = videoFeedConfig;
+  const { url, videoElement, connectionElement, dataElement } = videoFeedConfig;
   try {
     const pc = new RTCPeerConnection({
       iceServers: [],
@@ -13,6 +13,39 @@ export async function startStream(videoFeedConfig: VideoFeedConfig) {
 
     // Add a video transceiver to trigger ICE gathering and SDP media section
     pc.addTransceiver("video", { direction: "recvonly" });
+
+    // CREATE DATA CHANNEL ON CLIENT SIDE BEFORE CREATING OFFER
+    // This is crucial - the client (offerer) must create the data channel
+    const dataChannel = pc.createDataChannel("stats");
+    console.log("Created data channel:", dataChannel.label);
+
+    dataChannel.onopen = () => {
+      console.log("Data channel is open");
+    };
+
+    dataChannel.onmessage = (event) => {
+      try {
+        const stats: {
+          sentFrames: number;
+          droppedFrames: number;
+          timestamp: number;
+        } = JSON.parse(event.data);
+        const localeDateTime = new Date(stats.timestamp).toLocaleTimeString();
+        const statsText = `${localeDateTime}, sent/dropped: ${stats.sentFrames} / ${stats.droppedFrames}`;
+        dataElement.innerText = statsText;
+        console.log("Stats received:", stats);
+      } catch (e) {
+        console.error(`Error parsing stats:`, e);
+      }
+    };
+
+    dataChannel.onerror = (error) => {
+      console.error(`Data channel error:`, error);
+    };
+
+    dataChannel.onclose = () => {
+      console.log(`Data channel closed`);
+    };
 
     // Log all ICE candidates
     pc.onicecandidate = (event) => {
@@ -29,13 +62,13 @@ export async function startStream(videoFeedConfig: VideoFeedConfig) {
       } else {
         console.warn("No streams in ontrack event", event);
       }
-      statusElement.textContent = "Connected!";
+      connectionElement.textContent = "Connected!";
     };
 
     // Monitor connection state
     pc.onconnectionstatechange = () => {
       console.log("Connection state:", pc.connectionState);
-      statusElement.textContent = `Connection: ${pc.connectionState}`;
+      connectionElement.textContent = `Connection: ${pc.connectionState}`;
     };
 
     pc.oniceconnectionstatechange = () => {
@@ -92,8 +125,8 @@ export async function startStream(videoFeedConfig: VideoFeedConfig) {
   } catch (err) {
     console.error("Error:", err);
     if (err instanceof Error) {
-      statusElement.textContent = `Error: ${err.message}`;
+      connectionElement.textContent = `Error: ${err.message}`;
     }
-    statusElement.textContent = `Error: ${err}`;
+    connectionElement.textContent = `Error: ${err}`;
   }
 }
