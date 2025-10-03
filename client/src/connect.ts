@@ -1,4 +1,40 @@
+import { FilesetResolver } from "@mediapipe/tasks-vision";
+import { DetectionsSet } from "./detector";
 import type { VideoFeedConfig } from "./types";
+
+const startObjectDetection = async (videoElement: HTMLVideoElement) => {
+  const detectionList = new DetectionsSet(100, videoElement, "255,0,0");
+  const { ObjectDetector } = await import("@mediapipe/tasks-vision");
+  const vision = await FilesetResolver.forVisionTasks("./wasm");
+  const objectDetector = await ObjectDetector.createFromOptions(vision, {
+    baseOptions: {
+      modelAssetPath: `./models/efficientdet_lite0.tflite`,
+    },
+    scoreThreshold: 0.5,
+    runningMode: "VIDEO",
+    categoryAllowlist: ["person", "dog"],
+  });
+  let lastVideoTime = -1;
+  function renderLoop(): void {
+    if (videoElement.currentTime !== lastVideoTime) {
+      const startTimeMs = performance.now();
+      {
+        const { detections } = objectDetector.detectForVideo(
+          videoElement,
+          startTimeMs,
+        );
+        for (const detection of detections) {
+          detectionList.add(detection);
+        }
+        lastVideoTime = videoElement.currentTime;
+      }
+    }
+    requestAnimationFrame(() => {
+      renderLoop();
+    });
+  }
+  renderLoop();
+};
 
 /**
  * Start a WebRTC stream from the given video feed configuration.
@@ -57,6 +93,7 @@ export async function startStream(videoFeedConfig: VideoFeedConfig) {
         videoElement.srcObject = event.streams[0];
         videoElement.onloadedmetadata = () => {
           videoElement.play();
+          startObjectDetection(videoElement);
         };
       } else {
         console.warn("No streams in ontrack event", event);

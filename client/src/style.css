@@ -56,3 +56,12 @@ h1 {
   display: flex;
   justify-content: space-between;
 }
+
+.detection {
+  position: absolute;
+  display: block;
+  z-index: 100;
+  top: 0;
+  left: 0;
+  opacity: 0.5;
+}
