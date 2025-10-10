@@ -1,49 +1,6 @@
-import { FilesetResolver } from "@mediapipe/tasks-vision";
-import { DetectionsSet } from "./detector";
-import type { VideoFeedConfig } from "./types";
+import { startObjectDetection } from "./detector";
 import { getStorage } from "./storage";
-
-const startObjectDetection = async (videoElement: HTMLVideoElement) => {
-  const detectionLists = {
-    dog: new DetectionsSet(100, videoElement, "255,0,0"),
-    person: new DetectionsSet(100, videoElement, "0,0,255"),
-  };
-  const { ObjectDetector } = await import("@mediapipe/tasks-vision");
-  const vision = await FilesetResolver.forVisionTasks("./wasm");
-  const objectDetector = await ObjectDetector.createFromOptions(vision, {
-    baseOptions: {
-      modelAssetPath: `./models/efficientdet_lite0.tflite`,
-    },
-    scoreThreshold: 0.5,
-    runningMode: "VIDEO",
-    categoryAllowlist: ["person", "dog"],
-  });
-  let lastVideoTime = -1;
-  let lastDetectionTime = 0; // ms timestamp of last detection
-  const DETECTION_INTERVAL = 100; // ms
-  function renderLoop(): void {
-    if (videoElement.currentTime !== lastVideoTime) {
-      const now = performance.now();
-      if (now - lastDetectionTime >= DETECTION_INTERVAL) {
-        const { detections } = objectDetector.detectForVideo(videoElement, now);
-        for (const detection of detections) {
-          const category = detection.categories[0].categoryName;
-          if (category in detectionLists) {
-            detectionLists[category as keyof typeof detectionLists].add(
-              detection,
-            );
-          }
-        }
-        lastDetectionTime = now;
-        lastVideoTime = videoElement.currentTime;
-      }
-    }
-    requestAnimationFrame(() => {
-      renderLoop();
-    });
-  }
-  renderLoop();
-};
+import type { VideoFeedConfig } from "./types";
 
 /**
  * Start a WebRTC stream from the given video feed configuration.
