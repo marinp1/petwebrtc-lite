@@ -3,12 +3,24 @@
   <head>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <meta name="theme-color" content="#081012" />
     <title>PetWebRTC Cameras</title>
   </head>
   <body>
-    <h1>Camera Feeds</h1>
-    <button id="recognisition-button" style="display: none;">Recognize objects: loading...</button>
-    <div id="container" class="container"></div>
+    <header class="topbar">
+      <div class="brand">
+        <h1>PetWebRTC Cameras</h1>
+        <p class="subtitle">Live camera feeds — mobile friendly</p>
+      </div>
+      <div class="actions">
+        <button id="recognisition-button" class="btn btn-ghost" aria-pressed="false">Recognize objects: loading...</button>
+      </div>
+    </header>
+
+    <main>
+      <div id="container" class="container"></div>
+    </main>
+
     <script type="module" src="/src/main.ts"></script>
   </body>
 </html>

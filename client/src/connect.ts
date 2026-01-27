@@ -1,40 +1,87 @@
 import { startObjectDetection } from "./detector";
 import { getStorage } from "./storage";
-import type { VideoFeedConfig } from "./types";
 
 /**
  * Start a WebRTC stream from the given video feed configuration.
  * Sets up a RTCPeerConnection, handles ICE candidates, and manages the video element.
+ *
+ * Production-grade notes in-code:
+ * - Use structured messages on the stats data channel (JSON).
+ * - Rely on connectionState events for authoritative connection time.
+ * - Update visible badges directly (no DOM observation required).
  */
-export async function startStream(videoFeedConfig: VideoFeedConfig) {
-  const { url, videoElement, connectionElement, dataElement } = videoFeedConfig;
+export async function startStream(videoFeedConfig: {
+  url: string;
+  name?: string;
+  videoElement: HTMLVideoElement;
+  connectionElement: HTMLElement;
+  // visible badge elements
+  droppedElement?: HTMLElement;
+  timeElement?: HTMLElement;
+}) {
+  const { url, videoElement, connectionElement, droppedElement, timeElement } =
+    videoFeedConfig;
   try {
     const pc = new RTCPeerConnection({
       iceServers: [],
     });
 
-    // Add a video transceiver to trigger ICE gathering and SDP media section
     pc.addTransceiver("video", { direction: "recvonly" });
 
-    // CREATE DATA CHANNEL ON CLIENT SIDE BEFORE CREATING OFFER
-    // This is crucial - the client (offerer) must create the data channel
+    // Create data channel as offerer for stats (structured JSON)
     const dataChannel = pc.createDataChannel("stats");
     console.log("Created data channel:", dataChannel.label);
+
+    // Timer state for "time connected" badge
+    let timerId: number | null = null;
+    let connectedSince: number | null = null;
+
+    const formatTime = (s: number) => {
+      const mm = Math.floor(s / 60)
+        .toString()
+        .padStart(2, "0");
+      const ss = Math.floor(s % 60)
+        .toString()
+        .padStart(2, "0");
+      return `${mm}:${ss}`;
+    };
+
+    const startTimer = () => {
+      if (!timeElement) return;
+      if (timerId) return;
+      connectedSince = Date.now();
+      timeElement.textContent = "00:00";
+      timerId = window.setInterval(() => {
+        const secs = Math.max(
+          0,
+          Math.floor((Date.now() - (connectedSince ?? Date.now())) / 1000),
+        );
+        timeElement.textContent = formatTime(secs);
+      }, 1000);
+    };
+
+    const stopTimer = (reset = true) => {
+      if (!timeElement) return;
+      if (timerId) {
+        clearInterval(timerId);
+        timerId = null;
+      }
+      connectedSince = null;
+      if (reset) timeElement.textContent = "00:00";
+    };
 
     dataChannel.onopen = () => {
       console.log("Data channel is open");
     };
 
     dataChannel.onmessage = (event) => {
+      // Expect JSON: { sentFrames: number, droppedFrames: number, timestamp: number }
       try {
-        const stats: {
-          sentFrames: number;
-          droppedFrames: number;
-          timestamp: number;
-        } = JSON.parse(event.data);
-        const localeDateTime = new Date(stats.timestamp).toLocaleTimeString();
-        const statsText = `${localeDateTime}, sent/dropped: ${stats.sentFrames} / ${stats.droppedFrames}`;
-        dataElement.innerText = statsText;
+        const stats = JSON.parse(event.data);
+        if (typeof stats.droppedFrames === "number" && droppedElement) {
+          // use the numeric droppedFrames value directly (no regex/parsing)
+          droppedElement.textContent = String(stats.droppedFrames);
+        }
       } catch (e) {
         console.error(`Error parsing stats:`, e);
       }
@@ -48,7 +95,6 @@ export async function startStream(videoFeedConfig: VideoFeedConfig) {
       console.log(`Data channel closed`);
     };
 
-    // Log all ICE candidates
     pc.onicecandidate = (event) => {
       console.log("ICE candidate:", event.candidate);
     };
@@ -66,24 +112,37 @@ export async function startStream(videoFeedConfig: VideoFeedConfig) {
       } else {
         console.warn("No streams in ontrack event", event);
       }
-      connectionElement.textContent = "Connected!";
+      // mark connected optimistically here; authoritative change handled below
+      connectionElement.setAttribute("data-status", "connected");
     };
 
-    // Monitor connection state
+    // Use connection state changes to control authoritative UI and timer
     pc.onconnectionstatechange = () => {
       console.log("Connection state:", pc.connectionState);
-      connectionElement.textContent = `Connection: ${pc.connectionState}`;
+      const state = pc.connectionState;
+      if (state === "connected") {
+        connectionElement.setAttribute("data-status", "connected");
+        startTimer();
+      } else if (
+        state === "failed" ||
+        state === "disconnected" ||
+        state === "closed"
+      ) {
+        connectionElement.setAttribute("data-status", "disconnected");
+        stopTimer(true);
+      } else {
+        // other states (checking, connecting) -> show disconnected icon
+        connectionElement.setAttribute("data-status", "disconnected");
+      }
     };
 
     pc.oniceconnectionstatechange = () => {
       console.log("ICE connection state:", pc.iceConnectionState);
     };
 
-    // Log SDP offer
     const offer = await pc.createOffer();
     await pc.setLocalDescription(offer);
 
-    // Wait for ICE gathering to complete before sending offer (with timeout)
     await Promise.race<void>([
       new Promise((resolve) => {
         if (pc.iceGatheringState === "complete") {
@@ -103,17 +162,14 @@ export async function startStream(videoFeedConfig: VideoFeedConfig) {
           );
         }
       }),
-      new Promise((resolve) => setTimeout(resolve, 2000)), // 2 second timeout
+      new Promise((resolve) => setTimeout(resolve, 2000)),
     ]);
 
-    // IMPORTANT: Use pc.localDescription here, after ICE gathering
     console.log("Offer SDP (ICE complete):\n", pc.localDescription?.sdp);
 
-    // Send offer to server
-    console.log("Sending offer to server");
     const res = await fetch(`${url}/offer`, {
       method: "POST",
-      body: JSON.stringify(pc.localDescription), // use latest localDescription here
+      body: JSON.stringify(pc.localDescription),
       headers: { "Content-Type": "application/json" },
     });
 
@@ -123,14 +179,14 @@ export async function startStream(videoFeedConfig: VideoFeedConfig) {
 
     const answer = await res.json();
     console.log("Received answer from server:", answer);
-    console.log("Answer SDP:\n", answer.sdp);
     await pc.setRemoteDescription(answer);
     console.log("Set remote description");
   } catch (err) {
     console.error("Error:", err);
     if (err instanceof Error) {
       connectionElement.textContent = `Error: ${err.message}`;
+    } else {
+      connectionElement.textContent = `Error: ${String(err)}`;
     }
-    connectionElement.textContent = `Error: ${err}`;
   }
 }

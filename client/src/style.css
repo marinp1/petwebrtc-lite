@@ -1,79 +1,435 @@
+:root {
+  --bg: #071018;
+  --card: #0c1420;
+  --accent: #2dd4bf;
+  --muted: rgba(255, 255, 255, 0.7);
+  --glass: rgba(255, 255, 255, 0.03);
+  --radius: 10px;
+  --gap: 12px;
+
+  --topbar-height: 48px;
+  --controls-height: 0px; /* space reserved so native controls are visible */
+}
+
 body {
-  width: 100dvw;
-  height: 100dvh;
+  /* Reset viewport sizing to avoid iOS 100dvh/dvw quirks */
+  width: 100vw;
+  min-height: 100vh;
   margin: 0;
   padding: 0;
-  overflow-x: hidden;
-  background: #111;
-  font-family: "Courier New", Courier, monospace;
+  /* Reserve safe area space for iPhone notch/home indicator */
+  padding-top: env(safe-area-inset-top);
+  padding-bottom: env(safe-area-inset-bottom);
+  overflow: hidden;
+  /* Replace strong linear gradient with a single dark base + subtle vignette */
+  background-color: #061017;
+  background-image:
+    radial-gradient(
+      1200px 600px at 10% 10%,
+      rgba(45, 52, 54, 0.06),
+      transparent 10%
+    ),
+    radial-gradient(
+      1000px 500px at 90% 90%,
+      rgba(12, 18, 24, 0.06),
+      transparent 10%
+    );
+  font-family: Inter, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
+  color: var(--muted);
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
 }
 
-h1 {
-  text-align: center;
-  color: #0f0;
+/* Topbar — make compact, single-line and robust on mobile */
+.topbar {
+  /* tighten spacing and height */
+  height: 44px;
+  padding: 0 10px;
+  gap: 8px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  /* subtle translucent background + thin border; avoid heavy blur */
+  background: rgba(0, 0, 0, 0.28);
+  border-bottom: 1px solid rgba(255, 255, 255, 0.04);
+  backdrop-filter: blur(4px); /* allowed where supported, harmless otherwise */
+  box-shadow: none;
+  position: sticky;
+  top: 0;
+  z-index: 50;
 }
 
+/* Brand — one line, smaller and tighter */
+.brand h1 {
+  margin: 0;
+  font-size: 0.92rem;
+  font-weight: 600;
+  letter-spacing: 0.2px;
+  color: var(--accent);
+  line-height: 1;
+}
+.brand .subtitle {
+  display: none; /* hide subtitle to reduce vertical clutter on phones */
+}
+
+/* Actions — compact buttons (icon-friendly) */
+.actions {
+  display: flex;
+  gap: 8px;
+  align-items: center;
+}
+.btn {
+  padding: 6px 8px;
+  border-radius: 6px;
+  font-size: 0.88rem;
+  background: rgba(255, 255, 255, 0.02);
+  border: 1px solid rgba(255, 255, 255, 0.04);
+}
+
+/* Main & container — respect safe-area and avoid full-bleed gradient; allow scroll inside container */
+main {
+  box-sizing: border-box;
+  height: calc(100vh - 44px);
+  padding: 10px;
+  /* ensure bottom safe area is respected */
+  padding-bottom: calc(env(safe-area-inset-bottom) + 8px);
+  overflow: hidden;
+}
 .container {
-  display: block;
+  height: 100%;
+  display: grid;
+  gap: 10px;
+  grid-template-columns: repeat(auto-fill, minmax(280px, 1fr));
+  grid-auto-rows: auto; /* content-driven height */
+  align-content: start;
+  overflow: auto;
+  padding-bottom: calc(
+    env(safe-area-inset-bottom) +
+    12px
+  ); /* safe space for video controls */
 }
 
-.videoContainer summary {
-  padding: 4px 8px;
-  color: #0f0;
-  cursor: pointer;
-}
-
-.videoContainer {
+/* Cards — flatter, cleaner look */
+.card {
+  border-radius: 8px;
+  border: 1px solid rgba(255, 255, 255, 0.03);
+  background: linear-gradient(
+    180deg,
+    rgba(255, 255, 255, 0.01),
+    rgba(255, 255, 255, 0.005)
+  );
+  box-shadow: 0 8px 22px rgba(2, 6, 10, 0.45); /* subtle but consistent */
+  overflow: hidden;
   position: relative;
-  margin-bottom: 16px;
-  max-height: fit-content;
+  display: flex;
+  flex-direction: column;
 }
 
-/* ---- Each video tile ---- */
+/* Media wrapper: slightly stronger rounded corners and neutral background */
+.media {
+  border-radius: 8px;
+  overflow: hidden;
+  background: #000;
+}
 
-.videoContainer video {
+/* Video sizing -> fill the media area exactly */
+.camera-video {
   width: 100%;
-  height: auto;
-  object-fit: contain; /* show full video without cropping */
-  background: #000; /* black bars where needed */
+  height: 100%;
+  display: block;
+  object-fit: cover;
 }
 
-/* ---- Status overlay ---- */
+/* Title and badges: subtle background, slightly increased contrast */
+.badge.title {
+  background: rgba(0, 0, 0, 0.45);
+  color: var(--accent);
+  padding: 4px 8px;
+  border-radius: 6px;
+  font-weight: 600;
+  font-size: 0.86rem;
+}
+
+/* Status badge — tighter, always visible above media area */
+.videoContainer .status {
+  /* place the badge over the video area at bottom-right and make it compact */
+  position: absolute;
+  bottom: calc(var(--controls-height) + 8px);
+  right: 8px;
+  left: auto;
+  z-index: 220;
+  display: flex;
+  gap: 6px;
+  justify-content: flex-end;
+  pointer-events: none;
+  padding: 4px 6px; /* compact padding */
+  border-radius: 6px;
+  background: rgba(0, 0, 0, 0.5);
+  font-size: 0.78rem; /* slightly smaller */
+  color: rgba(255, 255, 255, 0.88);
+}
+
+/* badges (dropped/time) more compact */
+.badge.dropped,
+.badge.time {
+  min-width: auto;
+  padding: 3px 8px;
+  font-weight: 700;
+  border-radius: 999px;
+}
+
+/* small-screen adjustments (iPhone) */
+@media (max-width: 420px) {
+  .topbar {
+    height: 40px;
+    padding: 0 8px;
+  }
+  main {
+    padding: 8px;
+    height: calc(100vh - 40px);
+  }
+  .container {
+    gap: 8px;
+    padding-bottom: calc(env(safe-area-inset-bottom) + 10px);
+  }
+  .badge.title {
+    font-size: 0.82rem;
+    padding: 3px 6px;
+  }
+  .videoHeader {
+    width: 34px;
+    height: 34px;
+  }
+  .btn {
+    padding: 6px;
+    font-size: 0.86rem;
+  }
+}
+
+/* remove default marker/space that some browsers allocate (not needed for button) */
+.videoHeader::-webkit-details-marker {
+  display: none;
+}
+.videoContainer summary::marker {
+  display: none;
+}
+
+/* no-op replacement: ensure .videoHeader works as an overlay button */
+.videoHeader {
+  /* overlay summary inside the video area — compact, top-right */
+  position: absolute;
+  top: 8px;
+  right: 8px;
+  left: auto;
+  z-index: 60;
+  padding: 6px 8px;
+  font-weight: 600;
+  color: var(--muted);
+  background: rgba(0, 0, 0, 0.32);
+  border-radius: 8px;
+  cursor: pointer;
+  user-select: none;
+  font-size: 0.92rem;
+  width: 36px;
+  height: 36px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+}
+
+/* show a compact expand icon on the summary */
+.videoHeader::after {
+  content: "⤢";
+  font-size: 0.95rem;
+  color: var(--muted);
+  line-height: 1;
+  display: inline-block;
+}
+
+/* Status badges (replace/extend prior rules) */
 .videoContainer .status {
   position: absolute;
-  bottom: 0;
-  left: 0;
-  width: 100%;
-  text-align: left;
-  color: #0f0; /* green text for CCTV feel */
-  font-size: 0.9em;
-  font-family: monospace;
-  background: rgba(0, 0, 0, 0.6);
-  padding: 0.2em 0.5em;
-  box-sizing: border-box;
-  z-index: 10;
+  bottom: calc(var(--controls-height) + 8px);
+  right: 8px;
+  left: auto;
+  z-index: 220; /* high so it feels part of the video */
+  display: flex;
+  gap: 6px;
+  justify-content: flex-end;
   pointer-events: none;
-  display: flex;
-  justify-content: space-between;
+  padding: 4px 6px;
+  border-radius: 6px;
+  background: rgba(0, 0, 0, 0.5);
+  font-size: 0.78rem;
+  color: rgba(255, 255, 255, 0.88);
 }
 
-.detection {
+/* title overlay in top-left of the video */
+.videoContainer .title {
   position: absolute;
-  display: flex;
+  top: 8px;
+  left: 8px;
+  z-index: 80; /* above summary, below status */
+  pointer-events: none;
+  display: inline-flex;
+  align-items: center;
   justify-content: center;
-  align-items: flex-end;
-  z-index: 100;
-  top: 0;
-  left: 0;
-  opacity: 0.5;
 }
 
-.detection::after {
+/* visual style for title badge */
+.badge.title {
+  background: rgba(0, 0, 0, 0.45);
+  color: var(--accent);
+  padding: 4px 8px;
+  border-radius: 6px;
+  font-weight: 600;
+  font-size: 0.86rem;
+}
+
+/* general badge */
+.badge {
+  padding: 3px 6px;
+  border-radius: 999px;
+  background: rgba(255, 255, 255, 0.03);
+  color: var(--muted);
+  pointer-events: none;
+  display: inline-flex;
+  align-items: center;
+  min-width: auto;
+  justify-content: center;
+  font-variant-numeric: tabular-nums;
+  font-size: 0.86rem;
+}
+
+/* connection: show dot icon based on data-status, hide textual content visually */
+.badge.connection {
   position: relative;
-  width: 10px;
-  height: 10px;
-  border: 1px solid rgba(255, 255, 255, 0.3);
-  background-color: rgba(0, 0, 0, 0.5);
-  border-radius: 100%;
-  content: "";
+  color: transparent; /* hide any textual content from startStream */
+  min-width: 18px;
+  width: 18px;
+  height: 18px;
+}
+.badge.connection::before {
+  content: "●";
+  position: absolute;
+  left: 50%;
+  top: 50%;
+  transform: translate(-50%, -50%);
+  font-size: 0.85rem;
+  color: #ef4444; /* default red = disconnected */
+}
+.badge.connection[data-status="connected"]::before {
+  color: #4ade80; /* green when connected */
+}
+
+/* dropped frames badge (number only) */
+.badge.dropped {
+  padding: 3px 8px;
+  font-weight: 700;
+  color: #ffd166;
+}
+
+/* time connected badge */
+.badge.time {
+  padding: 3px 8px;
+  color: #a7f3d0;
+  font-weight: 700;
+}
+
+/* raw stats passed to startStream — keep it in DOM but hidden from layout */
+.raw-stats {
+  display: none !important;
+}
+
+/* small screens: topbar becomes auto height and grid becomes single column */
+@media (max-width: 640px), (orientation: landscape) {
+  :root {
+    --topbar-height: 44px; /* tighter for landscape/mobile */
+  }
+  .topbar {
+    height: var(--topbar-height);
+    padding: 6px 10px;
+  }
+  .container {
+    grid-template-columns: 1fr;
+    gap: 10px;
+  }
+  .camera-video {
+    object-fit: contain; /* prefer full view on mobile */
+    max-height: none;
+  }
+  .videoHeader {
+    font-size: 0.98rem;
+    padding: 8px 10px;
+  }
+  .btn {
+    padding: 6px 10px;
+    font-size: 0.95rem;
+  }
+
+  /* hide subtitle in tight landscape/small screens to save vertical space */
+  .brand .subtitle {
+    display: none;
+  }
+}
+
+/* Mobile-landscape / small devices: hide topbar and make videos fill available height */
+@media (max-width: 900px) and (orientation: landscape) {
+  /* remove topbar from layout */
+  .topbar {
+    display: none;
+    height: 0;
+    padding: 0;
+    margin: 0;
+  }
+
+  /* remove any body padding introduced for sidebar layout */
+  body {
+    padding-left: 0;
+    padding-top: 0;
+    padding-bottom: env(safe-area-inset-bottom);
+    height: 100vh;
+    overflow: hidden;
+  }
+
+  /* main uses full viewport now that topbar is hidden */
+  main {
+    height: 100vh;
+    padding: 6px;
+    box-sizing: border-box;
+  }
+
+  /* stack tiles vertically and allow scrolling if more than one */
+  .container {
+    grid-template-columns: 1fr;
+    gap: 8px;
+    overflow: auto;
+    padding-bottom: calc(env(safe-area-inset-bottom) + 12px);
+  }
+
+  /* force media to use available viewport height for a single-large view */
+  .media {
+    /* fill most of the viewport but leave a small margin for padding/controls */
+    height: calc(100vh - 12px);
+    aspect-ratio: auto;
+    max-height: 100vh;
+  }
+
+  /* ensure video fills the media area (so native controls render inside the visible area) */
+  .camera-video {
+    width: 100%;
+    height: 100%;
+    object-fit: cover;
+  }
+
+  /* keep status badges above the media and still visible (adjust bottom so it's inside media) */
+  .videoContainer .status {
+    bottom: calc(var(--controls-height) + 8px);
+    right: 8px;
+    left: auto;
+    z-index: 300;
+    gap: 6px;
+    padding: 4px 6px;
+    font-size: 0.78rem;
+  }
 }
