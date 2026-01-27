@@ -49,7 +49,8 @@ func HandleOffer(w http.ResponseWriter, r *http.Request, api *webrtc.API, cm *Cl
 	}
 	_, _ = peerConn.AddTrack(videoTrack)
 
-	client := NewClient(peerConn, videoTrack, nil)
+	// pass framerate so client timestamps increment consistently
+	client := NewClient(peerConn, videoTrack, nil, conf.Framerate)
 
 	// Handle incoming data channel from client
 	peerConn.OnDataChannel(func(dc *webrtc.DataChannel) {
@@ -83,6 +84,17 @@ func HandleOffer(w http.ResponseWriter, r *http.Request, api *webrtc.API, cm *Cl
 		}
 	})
 
+	peerConn.OnICECandidate(func(c *webrtc.ICECandidate) {
+		if c == nil {
+			return
+		}
+		log.Printf("New ICE candidate: %s", c.String())
+	})
+
+	peerConn.OnICEConnectionStateChange(func(state webrtc.ICEConnectionState) {
+		log.Printf("ICE connection state: %s", state.String())
+	})
+
 	if err := peerConn.SetRemoteDescription(offer); err != nil {
 		http.Error(w, "failed to set remote description", http.StatusInternalServerError)
 		return
@@ -95,7 +107,7 @@ func HandleOffer(w http.ResponseWriter, r *http.Request, api *webrtc.API, cm *Cl
 	}
 	_ = peerConn.SetLocalDescription(answer)
 
-	// Wait for ICE candidates
+	// Wait for ICE candidates (grow timeout to be more tolerant on slow networks)
 	done := make(chan struct{})
 	peerConn.OnICEGatheringStateChange(func(state webrtc.ICEGatheringState) {
 		if state == webrtc.ICEGatheringStateComplete {
@@ -104,7 +116,7 @@ func HandleOffer(w http.ResponseWriter, r *http.Request, api *webrtc.API, cm *Cl
 	})
 	select {
 	case <-done:
-	case <-time.After(2 * time.Second):
+	case <-time.After(5 * time.Second): // increased timeout
 	}
 
 	w.Header().Set("Content-Type", "application/json")

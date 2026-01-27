@@ -20,6 +20,7 @@ type Client struct {
 	dcMu          sync.RWMutex // Protects DataChannel access
 	Packetizer    rtp.Packetizer
 	lastTimestamp uint32
+	tsInc         uint32 // timestamp increment per frame (90kHz / fps)
 	startTime     time.Time
 	naluChan      chan []byte
 	done          chan struct{}
@@ -40,6 +41,8 @@ type FrameStats struct {
 	DroppedFrames uint64 `json:"droppedFrames"`
 	Timestamp     int64  `json:"timestamp"`
 }
+
+const maxPayloadSize = 1200 // MTU for packetizer
 
 func NewClientManager() *ClientManager {
 	return &ClientManager{
@@ -87,23 +90,40 @@ func (cm *ClientManager) AddClient(client *Client) {
 	cm.Clients[client] = struct{}{}
 	cm.Mu.Unlock()
 
-	// Send cached keyframes immediately
+	// Send cached keyframes immediately (use MTU and set proper timestamp)
+	// advance timestamp for each logical frame sent to keep monotonic RTP timestamps
+	if client.tsInc == 0 {
+		// fallback to 30fps if not set
+		client.tsInc = 90000 / 30
+	}
 	if cm.lastSPS != nil {
-		packets := client.Packetizer.Packetize(cm.lastSPS, 0)
+		client.lastTimestamp += client.tsInc
+		packets := client.Packetizer.Packetize(cm.lastSPS, maxPayloadSize)
 		for _, pkt := range packets {
-			_ = client.VideoTrack.WriteRTP(pkt)
+			pkt.Header.Timestamp = client.lastTimestamp
+			if err := client.VideoTrack.WriteRTP(pkt); err != nil {
+				log.Printf("WriteRTP error (SPS): %v", err)
+			}
 		}
 	}
 	if cm.lastPPS != nil {
-		packets := client.Packetizer.Packetize(cm.lastPPS, 0)
+		client.lastTimestamp += client.tsInc
+		packets := client.Packetizer.Packetize(cm.lastPPS, maxPayloadSize)
 		for _, pkt := range packets {
-			_ = client.VideoTrack.WriteRTP(pkt)
+			pkt.Header.Timestamp = client.lastTimestamp
+			if err := client.VideoTrack.WriteRTP(pkt); err != nil {
+				log.Printf("WriteRTP error (PPS): %v", err)
+			}
 		}
 	}
 	if cm.lastKeyframe != nil {
-		packets := client.Packetizer.Packetize(cm.lastKeyframe, 0)
+		client.lastTimestamp += client.tsInc
+		packets := client.Packetizer.Packetize(cm.lastKeyframe, maxPayloadSize)
 		for _, pkt := range packets {
-			_ = client.VideoTrack.WriteRTP(pkt)
+			pkt.Header.Timestamp = client.lastTimestamp
+			if err := client.VideoTrack.WriteRTP(pkt); err != nil {
+				log.Printf("WriteRTP error (Keyframe): %v", err)
+			}
 		}
 	}
 
@@ -119,11 +139,20 @@ func (cm *ClientManager) AddClient(client *Client) {
 					return
 				}
 				if client.PeerConn.ConnectionState() == webrtc.PeerConnectionStateConnected {
-					timestamp := uint32(time.Since(client.startTime).Milliseconds() * 90) // 90kHz clock
-					packets := client.Packetizer.Packetize(nalu, timestamp-client.lastTimestamp)
-					client.lastTimestamp = timestamp
+					// Advance timestamp once per frame for monotonic timestamps
+					if client.tsInc == 0 {
+						client.tsInc = 90000 / 30 // fallback
+					}
+					client.lastTimestamp += client.tsInc
+					timestamp := client.lastTimestamp
+
+					packets := client.Packetizer.Packetize(nalu, maxPayloadSize)
 					for _, pkt := range packets {
-						_ = client.VideoTrack.WriteRTP(pkt)
+						pkt.Header.Timestamp = timestamp
+						if err := client.VideoTrack.WriteRTP(pkt); err != nil {
+							// Log but don't block; underlying connection state will handle cleanup
+							log.Printf("WriteRTP error: %v", err)
+						}
 					}
 					atomic.AddUint64(&client.sentFrames, 1)
 				}
@@ -177,21 +206,30 @@ func (c *Client) SetDataChannel(dc *webrtc.DataChannel) {
 	c.dcMu.Unlock()
 }
 
-func NewClient(pc *webrtc.PeerConnection, track *webrtc.TrackLocalStaticRTP, dc *webrtc.DataChannel) *Client {
+func NewClient(pc *webrtc.PeerConnection, track *webrtc.TrackLocalStaticRTP, dc *webrtc.DataChannel, fps int) *Client {
 	ssrc := rand.Uint32()
 	packetizer := rtp.NewPacketizer(
-		1200, 96, ssrc, &codecs.H264Payloader{},
+		maxPayloadSize, 96, ssrc, &codecs.H264Payloader{},
 		rtp.NewRandomSequencer(), 90000,
 	)
-	naluChan := make(chan []byte, 100)
+	// Increase per-client NALU buffer to tolerate bursts
+	naluChan := make(chan []byte, 500)
 	done := make(chan struct{})
+
+	if fps <= 0 {
+		fps = 30
+	}
+	tsInc := uint32(90000 / fps)
+
 	return &Client{
-		PeerConn:    pc,
-		VideoTrack:  track,
-		DataChannel: dc,
-		Packetizer:  packetizer,
-		startTime:   time.Now(),
-		naluChan:    naluChan,
-		done:        done,
+		PeerConn:      pc,
+		VideoTrack:    track,
+		DataChannel:   dc,
+		Packetizer:    packetizer,
+		lastTimestamp: 0,
+		tsInc:         tsInc,
+		startTime:     time.Now(),
+		naluChan:      naluChan,
+		done:          done,
 	}
 }
