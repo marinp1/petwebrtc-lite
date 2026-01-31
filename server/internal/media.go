@@ -24,6 +24,7 @@ type Client struct {
 	startTime     time.Time
 	naluChan      chan []byte
 	done          chan struct{}
+	wg            sync.WaitGroup // Tracks sender goroutine
 	sentFrames    uint64
 	droppedFrames uint64
 }
@@ -128,7 +129,10 @@ func (cm *ClientManager) AddClient(client *Client) {
 	}
 
 	// Start per-client sender goroutine
+	client.wg.Add(1)
 	go func() {
+		defer client.wg.Done()
+
 		ticker := time.NewTicker(1 * time.Second)
 		defer ticker.Stop()
 
@@ -197,6 +201,12 @@ func (cm *ClientManager) RemoveClient(client *Client) {
 	default:
 		close(client.done)
 	}
+
+	// Wait for sender goroutine to finish
+	client.wg.Wait()
+
+	// Close NALU channel
+	close(client.naluChan)
 }
 
 // SetDataChannel safely sets the data channel for a client
