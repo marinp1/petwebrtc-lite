@@ -28,6 +28,8 @@ type CameraManager struct {
 	closer     io.Closer
 	wg         sync.WaitGroup
 	BufferSize int
+	mu         sync.Mutex
+	running    bool
 }
 
 // CameraConfig holds configuration for the camera manager
@@ -56,7 +58,16 @@ func NewCameraManager(config CameraConfig) *CameraManager {
 
 // StartCamera launches the camera streaming process using the provided shell command.
 // It reads H264 NAL units from stdout and sends them to the NALU channel for broadcasting.
+// Returns an error if camera is already running or fails to start.
 func (cm *CameraManager) StartCamera(cameraCmd string) error {
+	cm.mu.Lock()
+	if cm.running {
+		cm.mu.Unlock()
+		return fmt.Errorf("camera is already running")
+	}
+	cm.running = true
+	cm.mu.Unlock()
+
 	// Kill any running rpicam-vid processes before starting
 	_ = exec.Command("pkill", "-9", "rpicam-vid").Run()
 
@@ -225,6 +236,13 @@ func (cm *CameraManager) GetNALUChannel() <-chan []byte {
 
 // Stop gracefully stops the camera process and waits for cleanup
 func (cm *CameraManager) Stop() error {
+	cm.mu.Lock()
+	if !cm.running {
+		cm.mu.Unlock()
+		return nil
+	}
+	cm.mu.Unlock()
+
 	if cm.cmd == nil || cm.cmd.Process == nil {
 		return nil
 	}
@@ -242,6 +260,10 @@ func (cm *CameraManager) Stop() error {
 
 	// Close channel
 	close(cm.NALUChan)
+
+	cm.mu.Lock()
+	cm.running = false
+	cm.mu.Unlock()
 
 	log.Println("Camera stopped")
 	return nil
