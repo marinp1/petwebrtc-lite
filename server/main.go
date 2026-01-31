@@ -19,7 +19,7 @@ func enableCORS(corsOrigin string, next http.Handler) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		// Allow any origin; for production, restrict to your front-end URL
 		w.Header().Set("Access-Control-Allow-Origin", corsOrigin)
-		w.Header().Set("Access-Control-Allow-Methods", "GET, OPTIONS")
+		w.Header().Set("Access-Control-Allow-Methods", "GET, POST, OPTIONS")
 		w.Header().Set("Access-Control-Allow-Headers", "Content-Type")
 
 		// Handle preflight request
