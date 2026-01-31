@@ -177,14 +177,8 @@ func (cm *CameraManager) extractNALUs(naluBuf *[]byte, totalNALUs, droppedNALUs 
 		case cm.NALUChan <- nalu:
 			// Sent successfully
 		default:
-			// Channel full - drop oldest frame
+			// Channel full - drop this frame to prevent camera backpressure
 			*droppedNALUs++
-			select {
-			case <-cm.NALUChan:
-				cm.NALUChan <- nalu
-			default:
-				// Even oldest couldn't be dropped, skip this frame
-			}
 		}
 
 		// Move to next NAL unit
