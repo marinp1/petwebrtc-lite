@@ -132,6 +132,20 @@ class DetectionsSet extends Set<Detection> {
     const pt = this.computePointForDetection(detection);
     if (!pt) return this;
 
+    const prev = this.points[this.points.length - 1];
+    if (prev) {
+      // Apply EMA smoothing to reduce jitter
+      const smoothing = 0.4;
+      pt.x = prev.x + smoothing * (pt.x - prev.x);
+      pt.y = prev.y + smoothing * (pt.y - prev.y);
+
+      // Skip points too close to the previous one (filters micro-jitter)
+      const minDist = 4;
+      const dx = pt.x - prev.x;
+      const dy = pt.y - prev.y;
+      if (dx * dx + dy * dy < minDist * minDist) return this;
+    }
+
     this.points.push({ d: detection, x: pt.x, y: pt.y });
     super.add(detection);
 
@@ -151,7 +165,7 @@ class DetectionsSet extends Set<Detection> {
     this.ctx.lineJoin = "round";
     this.ctx.lineCap = "round";
 
-    const tension = 1.0;
+    const tension = 0.6;
 
     // loop over each segment (P1..P2) with P0 and P3 as neighbors
     for (let i = 0; i < n - 1; i++) {
