@@ -68,9 +68,6 @@ func (cm *CameraManager) StartCamera(cameraCmd string) error {
 	cm.running = true
 	cm.mu.Unlock()
 
-	// Kill any running rpicam-vid processes before starting
-	_ = exec.Command("pkill", "-9", "rpicam-vid").Run()
-
 	cm.cmd = exec.Command("sh", "-c", cameraCmd)
 	cm.cmd.Stderr = os.Stderr
 
@@ -81,10 +78,13 @@ func (cm *CameraManager) StartCamera(cameraCmd string) error {
 	cm.closer = stdout
 
 	if err := cm.cmd.Start(); err != nil {
+		cm.mu.Lock()
+		cm.running = false
+		cm.mu.Unlock()
 		return fmt.Errorf("failed to start camera: %w", err)
 	}
 
-	log.Println("Camera process started, streaming H264...")
+	log.Printf("Camera process started (PID: %d), streaming H264...", cm.cmd.Process.Pid)
 
 	// Start reading in goroutine
 	cm.wg.Add(1)
@@ -247,12 +247,15 @@ func (cm *CameraManager) Stop() error {
 		return nil
 	}
 
-	log.Println("Stopping camera process...")
+	pid := cm.cmd.Process.Pid
+	log.Printf("Stopping camera process (PID: %d)...", pid)
 
 	// Try graceful shutdown first
 	if err := cm.cmd.Process.Signal(os.Interrupt); err != nil {
-		// If that fails, force kill
-		_ = cm.cmd.Process.Kill()
+		log.Printf("Graceful shutdown failed, force killing process: %v", err)
+		if killErr := cm.cmd.Process.Kill(); killErr != nil {
+			log.Printf("Failed to kill process: %v", killErr)
+		}
 	}
 
 	// Wait for read goroutine to finish
