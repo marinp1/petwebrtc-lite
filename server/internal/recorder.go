@@ -1,6 +1,7 @@
 package internal
 
 import (
+	"bufio"
 	"encoding/json"
 	"fmt"
 	"os"
@@ -10,11 +11,14 @@ import (
 	"time"
 )
 
+const writeBufferSize = 64 * 1024 // 64KB buffer to batch writes and reduce syscalls
+
 // RecorderManager handles H264 recording to file
 type RecorderManager struct {
 	mu            sync.RWMutex
 	recording     atomic.Bool
 	file          *os.File
+	writer        *bufio.Writer // Buffered writer to reduce syscalls
 	filePath      string
 	startTime     time.Time
 	bytesWritten  int64
@@ -83,17 +87,18 @@ func (rm *RecorderManager) Start() (*RecordingStatus, error) {
 	}
 
 	rm.file = file
+	rm.writer = bufio.NewWriterSize(file, writeBufferSize)
 	rm.startTime = time.Now()
 	rm.bytesWritten = 0
 	rm.framesWritten = 0
 
 	// Write cached SPS/PPS first (required for decodable stream)
 	if rm.lastSPS != nil {
-		n, _ := rm.file.Write(rm.lastSPS)
+		n, _ := rm.writer.Write(rm.lastSPS)
 		rm.bytesWritten += int64(n)
 	}
 	if rm.lastPPS != nil {
-		n, _ := rm.file.Write(rm.lastPPS)
+		n, _ := rm.writer.Write(rm.lastPPS)
 		rm.bytesWritten += int64(n)
 	}
 
@@ -116,6 +121,11 @@ func (rm *RecorderManager) Stop() (*RecordingStatus, error) {
 	status := rm.getStatusLocked()
 
 	if rm.file != nil {
+		// Flush buffered data and sync to disk
+		if rm.writer != nil {
+			rm.writer.Flush()
+			rm.writer = nil
+		}
 		rm.file.Sync()
 		rm.file.Close()
 
@@ -205,8 +215,8 @@ func (rm *RecorderManager) handleNALU(nalu []byte) {
 	// Write to file if recording
 	if rm.recording.Load() {
 		rm.mu.Lock()
-		if rm.file != nil {
-			n, err := rm.file.Write(nalu)
+		if rm.writer != nil {
+			n, err := rm.writer.Write(nalu)
 			if err == nil {
 				rm.bytesWritten += int64(n)
 				rm.framesWritten++
@@ -286,6 +296,10 @@ func (rm *RecorderManager) Shutdown() {
 
 	rm.mu.Lock()
 	if rm.file != nil {
+		if rm.writer != nil {
+			rm.writer.Flush()
+			rm.writer = nil
+		}
 		rm.file.Sync()
 		rm.file.Close()
 		rm.file = nil
