@@ -2,6 +2,8 @@ package config
 
 import (
 	"bufio"
+	"fmt"
+	"log"
 	"os"
 	"strconv"
 	"strings"
@@ -71,5 +73,51 @@ func ParseConfig(path string) *ServerConfig {
 		}
 	}
 
+	// Validate and fix invalid values
+	conf.Validate()
+
 	return conf
+}
+
+// Validate checks configuration values and applies corrections or warnings
+func (c *ServerConfig) Validate() {
+	// Validate port range
+	if c.Addr < 1 || c.Addr > 65535 {
+		log.Printf("WARNING: Invalid port %d, using default 8765", c.Addr)
+		c.Addr = 8765
+	}
+
+	// Validate dimensions
+	if c.Width <= 0 {
+		log.Printf("WARNING: Invalid width %d, using default 1280", c.Width)
+		c.Width = 1280
+	}
+	if c.Height <= 0 {
+		log.Printf("WARNING: Invalid height %d, using default 720", c.Height)
+		c.Height = 720
+	}
+
+	// Validate framerate
+	if c.Framerate <= 0 || c.Framerate > 120 {
+		log.Printf("WARNING: Invalid framerate %d, using default 30", c.Framerate)
+		c.Framerate = 30
+	}
+
+	// Validate rotation (must be 0, 90, 180, or 270)
+	validRotations := map[int]bool{0: true, 90: true, 180: true, 270: true}
+	if !validRotations[c.Rotation] {
+		log.Printf("WARNING: Invalid rotation %d, using default 180", c.Rotation)
+		c.Rotation = 180
+	}
+
+	// Warn about insecure CORS setting
+	if c.CorsOrigin == "*" {
+		log.Println("WARNING: CORS origin set to '*' - this is insecure for production")
+	}
+}
+
+// String returns a formatted string representation of the config for logging
+func (c *ServerConfig) String() string {
+	return fmt.Sprintf("Port=%d, Resolution=%dx%d@%dfps, Rotation=%d°, CORS=%s",
+		c.Addr, c.Width, c.Height, c.Framerate, c.Rotation, c.CorsOrigin)
 }
