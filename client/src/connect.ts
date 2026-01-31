@@ -9,6 +9,8 @@ import { getStorage } from "./storage";
  * - Use structured messages on the stats data channel (JSON).
  * - Rely on connectionState events for authoritative connection time.
  * - Update visible badges directly (no DOM observation required).
+ *
+ * @returns RTCPeerConnection instance for lifecycle management (or null on error)
  */
 export async function startStream(videoFeedConfig: {
   url: string;
@@ -18,7 +20,7 @@ export async function startStream(videoFeedConfig: {
   // visible badge elements
   droppedElement?: HTMLElement;
   timeElement?: HTMLElement;
-}) {
+}): Promise<RTCPeerConnection | null> {
   const { url, videoElement, connectionElement, droppedElement, timeElement } =
     videoFeedConfig;
   try {
@@ -181,6 +183,9 @@ export async function startStream(videoFeedConfig: {
     console.log("Received answer from server:", answer);
     await pc.setRemoteDescription(answer);
     console.log("Set remote description");
+
+    // Return the peer connection for lifecycle management
+    return pc;
   } catch (err) {
     console.error("Error:", err);
     if (err instanceof Error) {
@@ -188,5 +193,6 @@ export async function startStream(videoFeedConfig: {
     } else {
       connectionElement.textContent = `Error: ${String(err)}`;
     }
+    return null;
   }
 }

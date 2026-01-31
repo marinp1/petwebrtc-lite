@@ -84,33 +84,37 @@ body {
   font-size: 0.88rem;
   background: rgba(255, 255, 255, 0.02);
   border: 1px solid rgba(255, 255, 255, 0.04);
+  color: var(--muted);
+  cursor: pointer;
 }
 
-/* Main & container — respect safe-area and avoid full-bleed gradient; allow scroll inside container */
+/* Main container */
 main {
   box-sizing: border-box;
   height: calc(100vh - 44px);
   padding: 10px;
-  /* ensure bottom safe area is respected */
   padding-bottom: calc(env(safe-area-inset-bottom) + 8px);
   overflow: hidden;
-}
-.container {
-  height: 100%;
-  display: grid;
-  gap: 10px;
-  grid-template-columns: repeat(auto-fill, minmax(280px, 1fr));
-  grid-auto-rows: auto; /* content-driven height */
-  align-content: start;
-  overflow: auto;
-  padding-bottom: calc(
-    env(safe-area-inset-bottom) +
-    12px
-  ); /* safe space for video controls */
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
 }
 
-/* Cards — flatter, cleaner look */
-.card {
+/* Carousel container - holds all slides */
+.container {
+  position: relative;
+  flex: 1;
+  overflow: hidden;
+  border-radius: 8px;
+}
+
+/* Carousel slides - positioned absolutely */
+.carousel-slide {
+  position: absolute;
+  top: 0;
+  left: 0;
+  width: 100%;
+  height: 100%;
   border-radius: 8px;
   border: 1px solid rgba(255, 255, 255, 0.03);
   background: linear-gradient(
@@ -118,141 +122,173 @@ main {
     rgba(255, 255, 255, 0.01),
     rgba(255, 255, 255, 0.005)
   );
-  box-shadow: 0 8px 22px rgba(2, 6, 10, 0.45); /* subtle but consistent */
+  box-shadow: 0 8px 22px rgba(2, 6, 10, 0.45);
   overflow: hidden;
-  position: relative;
   display: flex;
   flex-direction: column;
+  will-change: transform;
 }
 
-/* Media wrapper: slightly stronger rounded corners and neutral background */
+/* Slide states and transitions */
+.carousel-slide.active {
+  transform: translateX(0);
+  z-index: 2;
+}
+
+.carousel-slide.prev {
+  transform: translateX(-100%);
+  z-index: 1;
+}
+
+.carousel-slide.next {
+  transform: translateX(100%);
+  z-index: 1;
+}
+
+/* Slide enter/exit animations */
+.carousel-slide.slide-enter-from-left {
+  transform: translateX(-100%);
+  z-index: 3;
+}
+
+.carousel-slide.slide-enter-from-right {
+  transform: translateX(100%);
+  z-index: 3;
+}
+
+.carousel-slide.slide-enter-active {
+  transform: translateX(0);
+  transition: transform 300ms cubic-bezier(0.4, 0, 0.2, 1);
+}
+
+.carousel-slide.slide-exit-to-left {
+  transform: translateX(-100%);
+  transition: transform 300ms cubic-bezier(0.4, 0, 0.2, 1);
+}
+
+.carousel-slide.slide-exit-to-right {
+  transform: translateX(100%);
+  transition: transform 300ms cubic-bezier(0.4, 0, 0.2, 1);
+}
+
+/* Media wrapper */
 .media {
+  flex: 1;
   border-radius: 8px;
   overflow: hidden;
   background: #000;
+  position: relative;
 }
 
-/* Video sizing -> fill the media area exactly */
+/* Video sizing */
 .camera-video {
   width: 100%;
   height: 100%;
   display: block;
-  object-fit: cover;
+  object-fit: contain;
 }
 
-/* Title and badges: subtle background, slightly increased contrast */
-.badge.title {
-  background: rgba(0, 0, 0, 0.45);
-  color: var(--accent);
-  padding: 4px 8px;
-  border-radius: 6px;
-  font-weight: 600;
-  font-size: 0.86rem;
+/* Navigation container */
+.carousel-nav {
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  padding: 8px 0;
+  min-height: 36px;
 }
 
-/* Status badge — tighter, always visible above media area */
-.videoContainer .status {
-  /* place the badge over the video area at bottom-right and make it compact */
+/* Indicator dots */
+.carousel-indicators {
+  display: flex;
+  gap: 8px;
+  align-items: center;
+  justify-content: center;
+}
+
+.indicator-dot {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  background: rgba(255, 255, 255, 0.3);
+  border: none;
+  padding: 0;
+  cursor: pointer;
+  transition: all 200ms ease;
+}
+
+.indicator-dot:hover {
+  background: rgba(255, 255, 255, 0.5);
+  transform: scale(1.2);
+}
+
+.indicator-dot.active {
+  background: var(--accent);
+  width: 24px;
+  border-radius: 4px;
+}
+
+/* Arrow buttons */
+.carousel-arrow {
+  position: absolute;
+  top: 50%;
+  transform: translateY(-50%);
+  background: rgba(0, 0, 0, 0.6);
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  border-radius: 50%;
+  width: 44px;
+  height: 44px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+  z-index: 100;
+  color: white;
+  transition: all 200ms ease;
+  opacity: 0;
+}
+
+.carousel-arrow:hover {
+  background: rgba(0, 0, 0, 0.8);
+  border-color: rgba(255, 255, 255, 0.2);
+}
+
+.carousel-arrow.disabled {
+  opacity: 0.3;
+  cursor: not-allowed;
+}
+
+.carousel-arrow-prev {
+  left: 16px;
+}
+
+.carousel-arrow-next {
+  right: 16px;
+}
+
+/* Show arrows on hover (desktop) */
+@media (hover: hover) and (pointer: fine) {
+  main:hover .carousel-arrow:not(.disabled) {
+    opacity: 0.8;
+  }
+  .carousel-arrow:hover:not(.disabled) {
+    opacity: 1;
+  }
+}
+
+/* Always show arrows on touch devices */
+@media (hover: none) {
+  .carousel-arrow:not(.disabled) {
+    opacity: 0.6;
+  }
+}
+
+/* Badges and overlays */
+.carousel-slide .status {
   position: absolute;
   bottom: calc(var(--controls-height) + 8px);
   right: 8px;
   left: auto;
   z-index: 220;
-  display: flex;
-  gap: 6px;
-  justify-content: flex-end;
-  pointer-events: none;
-  padding: 4px 6px; /* compact padding */
-  border-radius: 6px;
-  background: rgba(0, 0, 0, 0.5);
-  font-size: 0.78rem; /* slightly smaller */
-  color: rgba(255, 255, 255, 0.88);
-}
-
-/* badges (dropped/time) more compact */
-.badge.dropped,
-.badge.time {
-  min-width: auto;
-  padding: 3px 8px;
-  font-weight: 700;
-  border-radius: 999px;
-}
-
-/* small-screen adjustments (iPhone) */
-@media (max-width: 420px) {
-  .topbar {
-    height: 40px;
-    padding: 0 8px;
-  }
-  main {
-    padding: 8px;
-    height: calc(100vh - 40px);
-  }
-  .container {
-    gap: 8px;
-    padding-bottom: calc(env(safe-area-inset-bottom) + 10px);
-  }
-  .badge.title {
-    font-size: 0.82rem;
-    padding: 3px 6px;
-  }
-  .videoHeader {
-    width: 34px;
-    height: 34px;
-  }
-  .btn {
-    padding: 6px;
-    font-size: 0.86rem;
-  }
-}
-
-/* remove default marker/space that some browsers allocate (not needed for button) */
-.videoHeader::-webkit-details-marker {
-  display: none;
-}
-.videoContainer summary::marker {
-  display: none;
-}
-
-/* no-op replacement: ensure .videoHeader works as an overlay button */
-.videoHeader {
-  /* overlay summary inside the video area — compact, top-right */
-  position: absolute;
-  top: 8px;
-  right: 8px;
-  left: auto;
-  z-index: 60;
-  padding: 6px 8px;
-  font-weight: 600;
-  color: var(--muted);
-  background: rgba(0, 0, 0, 0.32);
-  border-radius: 8px;
-  cursor: pointer;
-  user-select: none;
-  font-size: 0.92rem;
-  width: 36px;
-  height: 36px;
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-}
-
-/* show a compact expand icon on the summary */
-.videoHeader::after {
-  content: "⤢";
-  font-size: 0.95rem;
-  color: var(--muted);
-  line-height: 1;
-  display: inline-block;
-}
-
-/* Status badges (replace/extend prior rules) */
-.videoContainer .status {
-  position: absolute;
-  bottom: calc(var(--controls-height) + 8px);
-  right: 8px;
-  left: auto;
-  z-index: 220; /* high so it feels part of the video */
   display: flex;
   gap: 6px;
   justify-content: flex-end;
@@ -265,11 +301,11 @@ main {
 }
 
 /* title overlay in top-left of the video */
-.videoContainer .title {
+.carousel-slide .title {
   position: absolute;
   top: 8px;
   left: 8px;
-  z-index: 80; /* above summary, below status */
+  z-index: 80;
   pointer-events: none;
   display: inline-flex;
   align-items: center;
@@ -301,10 +337,10 @@ main {
   font-size: 0.86rem;
 }
 
-/* connection: show dot icon based on data-status, hide textual content visually */
+/* connection: show dot icon based on data-status */
 .badge.connection {
   position: relative;
-  color: transparent; /* hide any textual content from startStream */
+  color: transparent;
   min-width: 18px;
   width: 18px;
   height: 18px;
@@ -322,7 +358,7 @@ main {
   color: #4ade80; /* green when connected */
 }
 
-/* dropped frames badge (number only) */
+/* dropped frames badge */
 .badge.dropped {
   padding: 3px 8px;
   font-weight: 700;
@@ -336,46 +372,66 @@ main {
   font-weight: 700;
 }
 
-/* raw stats passed to startStream — keep it in DOM but hidden from layout */
-.raw-stats {
-  display: none !important;
+/* Screen reader only (for live announcements) */
+.sr-only {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  padding: 0;
+  margin: -1px;
+  overflow: hidden;
+  clip: rect(0, 0, 0, 0);
+  white-space: nowrap;
+  border-width: 0;
 }
 
-/* small screens: topbar becomes auto height and grid becomes single column */
+/* Small screens (iPhone) */
+@media (max-width: 420px) {
+  .topbar {
+    height: 40px;
+    padding: 0 8px;
+  }
+  main {
+    padding: 8px;
+    height: calc(100vh - 40px);
+  }
+  .badge.title {
+    font-size: 0.82rem;
+    padding: 3px 6px;
+  }
+  .btn {
+    padding: 6px;
+    font-size: 0.86rem;
+  }
+  .carousel-arrow {
+    width: 36px;
+    height: 36px;
+  }
+}
+
+/* Mobile and landscape adjustments */
 @media (max-width: 640px), (orientation: landscape) {
   :root {
-    --topbar-height: 44px; /* tighter for landscape/mobile */
+    --topbar-height: 44px;
   }
   .topbar {
     height: var(--topbar-height);
     padding: 6px 10px;
   }
-  .container {
-    grid-template-columns: 1fr;
-    gap: 10px;
-  }
   .camera-video {
-    object-fit: contain; /* prefer full view on mobile */
-    max-height: none;
-  }
-  .videoHeader {
-    font-size: 0.98rem;
-    padding: 8px 10px;
+    object-fit: contain;
   }
   .btn {
     padding: 6px 10px;
     font-size: 0.95rem;
   }
-
-  /* hide subtitle in tight landscape/small screens to save vertical space */
   .brand .subtitle {
     display: none;
   }
 }
 
-/* Mobile-landscape / small devices: hide topbar and make videos fill available height */
+/* Mobile landscape - hide topbar and maximize video */
 @media (max-width: 900px) and (orientation: landscape) {
-  /* remove topbar from layout */
   .topbar {
     display: none;
     height: 0;
@@ -383,7 +439,6 @@ main {
     margin: 0;
   }
 
-  /* remove any body padding introduced for sidebar layout */
   body {
     padding-left: 0;
     padding-top: 0;
@@ -392,44 +447,32 @@ main {
     overflow: hidden;
   }
 
-  /* main uses full viewport now that topbar is hidden */
   main {
     height: 100vh;
     padding: 6px;
     box-sizing: border-box;
   }
 
-  /* stack tiles vertically and allow scrolling if more than one */
-  .container {
-    grid-template-columns: 1fr;
-    gap: 8px;
-    overflow: auto;
-    padding-bottom: calc(env(safe-area-inset-bottom) + 12px);
-  }
-
-  /* force media to use available viewport height for a single-large view */
   .media {
-    /* fill most of the viewport but leave a small margin for padding/controls */
-    height: calc(100vh - 12px);
-    aspect-ratio: auto;
-    max-height: 100vh;
+    height: calc(100vh - 60px);
   }
 
-  /* ensure video fills the media area (so native controls render inside the visible area) */
   .camera-video {
-    width: 100%;
-    height: 100%;
     object-fit: cover;
   }
 
-  /* keep status badges above the media and still visible (adjust bottom so it's inside media) */
-  .videoContainer .status {
+  .carousel-slide .status {
     bottom: calc(var(--controls-height) + 8px);
     right: 8px;
-    left: auto;
     z-index: 300;
-    gap: 6px;
-    padding: 4px 6px;
-    font-size: 0.78rem;
   }
+}
+
+/* Legacy classes for backwards compatibility */
+.card {
+  /* Now handled by .carousel-slide */
+}
+
+.videoContainer {
+  /* Now handled by .carousel-slide */
 }

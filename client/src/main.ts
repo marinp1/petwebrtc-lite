@@ -1,19 +1,22 @@
 import "./style.css";
 
 import { getCameraCount } from "./cameras";
-import { startStream } from "./connect";
+import { Carousel } from "./carousel";
+import { SwipeGestureHandler } from "./gestures";
+import { NavigationUI } from "./navigation";
 import { getStorage, setStorage } from "./storage";
 
 const cameraCount = await getCameraCount();
 console.log("Found", cameraCount, "cameras");
 
 const container = document.querySelector<HTMLDivElement>(".container")!;
+const navContainer = document.querySelector<HTMLDivElement>(".carousel-nav")!;
 const recognisitionButton = document.getElementById("recognisition-button")!;
 
-// mark container with camera count class so CSS can adapt layout
-container.classList.add(`cols-${Math.min(cameraCount, 4)}`);
+// Initialize carousel
+const carousel = new Carousel(cameraCount, container);
 
-// apply semantic button state & text
+// Apply semantic button state & text for detection toggle
 {
   const recognisitionActive = getStorage().recognisitionActive;
   recognisitionButton.classList.remove("btn-ghost");
@@ -29,13 +32,13 @@ recognisitionButton.onclick = (ev) => {
   window.location.reload();
 };
 
-// Create video elements and start streams
-for (let i = 1; i <= cameraCount; i++) {
+// Create video elements and register with carousel
+for (let i = 0; i < cameraCount; i++) {
   const videoElement = document.createElement("video");
   videoElement.autoplay = true;
   videoElement.playsInline = true;
   videoElement.controls = true;
-  videoElement.title = `Camera ${i}`;
+  videoElement.title = `Camera ${i + 1}`;
   videoElement.className = "camera-video";
 
   const statusContainer = document.createElement("div");
@@ -59,45 +62,43 @@ for (let i = 1; i <= cameraCount; i++) {
 
   statusContainer.append(connectionElement, droppedElement, timeElement);
 
-  // use a plain container instead of <details> so clicking the header doesn't hide content
-  const videoContainer = document.createElement("div");
-  videoContainer.className = "videoContainer card";
-  const summary = document.createElement("button");
-  // keep a11y label, but render as an overlay button (no visible text)
-  summary.className = "videoHeader";
-  summary.setAttribute("aria-label", `Camera ${i}`);
-  summary.type = "button";
-  summary.textContent = "";
-  // toggles an 'expanded' class instead of collapsing the element
-  summary.addEventListener("click", (ev) => {
-    ev.preventDefault();
-    videoContainer.classList.toggle("expanded");
-  });
+  // Carousel slide container
+  const slideContainer = document.createElement("div");
+  slideContainer.className = "carousel-slide card";
 
   // title overlay (visible on the video)
   const titleElement = document.createElement("span");
   titleElement.className = "badge title";
-  titleElement.textContent = `Camera ${i}`;
+  titleElement.textContent = `Camera ${i + 1}`;
   titleElement.setAttribute("aria-hidden", "true");
 
-  // media wrapper to control aspect ratio and avoid card growing excessively
+  // media wrapper to control aspect ratio
   const media = document.createElement("div");
   media.className = "media";
   media.appendChild(videoElement);
 
-  videoContainer.appendChild(summary);
-  videoContainer.appendChild(media);
-  videoContainer.appendChild(titleElement);
-  videoContainer.appendChild(statusContainer);
-  container.appendChild(videoContainer);
+  slideContainer.appendChild(media);
+  slideContainer.appendChild(titleElement);
+  slideContainer.appendChild(statusContainer);
+  container.appendChild(slideContainer);
 
-  const url = `/camera${i}`;
-  startStream({
-    url,
-    name: `Camera ${i}`,
+  // Register camera with carousel
+  carousel.registerCamera(i, {
     videoElement,
+    container: slideContainer,
     connectionElement,
     droppedElement,
     timeElement,
   });
 }
+
+// Initialize gesture handler (instance used for side effects)
+void new SwipeGestureHandler(container, carousel);
+
+// Initialize navigation UI (instance used for side effects)
+void new NavigationUI(carousel, navContainer);
+
+// Initialize carousel connections (connect to current + preload adjacent)
+carousel.initialize().catch((err) => {
+  console.error("Failed to initialize carousel:", err);
+});
