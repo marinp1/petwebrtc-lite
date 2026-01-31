@@ -1,6 +1,7 @@
 package internal
 
 import (
+	"bytes"
 	"encoding/json"
 	"log"
 	"math/rand"
@@ -76,12 +77,12 @@ func (cm *ClientManager) cacheKeyframes(nalu []byte) {
 	switch naluType {
 	case 7: // SPS
 		// Only copy if changed to avoid unnecessary allocations
-		if !bytesEqual(cm.lastSPS, nalu) {
+		if !bytes.Equal(cm.lastSPS, nalu) {
 			cm.lastSPS = make([]byte, len(nalu))
 			copy(cm.lastSPS, nalu)
 		}
 	case 8: // PPS
-		if !bytesEqual(cm.lastPPS, nalu) {
+		if !bytes.Equal(cm.lastPPS, nalu) {
 			cm.lastPPS = make([]byte, len(nalu))
 			copy(cm.lastPPS, nalu)
 		}
@@ -90,19 +91,6 @@ func (cm *ClientManager) cacheKeyframes(nalu []byte) {
 		cm.lastKeyframe = make([]byte, len(nalu))
 		copy(cm.lastKeyframe, nalu)
 	}
-}
-
-// bytesEqual checks if two byte slices are equal
-func bytesEqual(a, b []byte) bool {
-	if len(a) != len(b) {
-		return false
-	}
-	for i := range a {
-		if a[i] != b[i] {
-			return false
-		}
-	}
-	return true
 }
 
 func (cm *ClientManager) AddClient(client *Client) {
