@@ -36,6 +36,7 @@ type ClientManager struct {
 	lastKeyframe []byte
 	lastSPS      []byte
 	lastPPS      []byte
+	recorder     *RecorderManager
 }
 
 type FrameStats struct {
@@ -52,11 +53,29 @@ func NewClientManager() *ClientManager {
 	}
 }
 
+// SetRecorder attaches a recorder to receive NALUs
+func (cm *ClientManager) SetRecorder(rec *RecorderManager) {
+	cm.Mu.Lock()
+	cm.recorder = rec
+	cm.Mu.Unlock()
+}
+
 func (cm *ClientManager) BroadcastNALUs(naluChan <-chan []byte) {
 	for nalu := range naluChan {
 		cm.cacheKeyframes(nalu)
 
 		cm.Mu.RLock()
+
+		// Send to recorder (non-blocking)
+		if cm.recorder != nil {
+			select {
+			case cm.recorder.GetNALUChannel() <- nalu:
+			default:
+				// Recorder can't keep up, skip frame
+			}
+		}
+
+		// Send to clients
 		for c := range cm.Clients {
 			select {
 			case c.naluChan <- nalu:

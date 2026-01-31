@@ -54,6 +54,15 @@ func main() {
 	cameraManager := internal.NewCameraManager(config)
 	clientManager := internal.NewClientManager()
 
+	// Initialize recorder if recording directory is configured
+	var recorder *internal.RecorderManager
+	if conf.RecordingDir != "" {
+		recorder = internal.NewRecorderManager(conf.RecordingDir)
+		clientManager.SetRecorder(recorder)
+		recorder.ProcessNALUs()
+		log.Printf("Recording initialized: %s", conf.RecordingDir)
+	}
+
 	cameraCmd := fmt.Sprintf(
 		"rpicam-vid -t 0 --width %d --height %d --framerate %d --inline --rotation %d --codec h264 --nopreview -o -",
 		conf.Width, conf.Height, conf.Framerate, conf.Rotation,
@@ -75,6 +84,29 @@ func main() {
 	http.Handle("/offer", enableCORS(conf.CorsOrigin, http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		internal.HandleOffer(w, r, api, clientManager, conf)
 	})))
+
+	// Recording endpoints (status is always available, others only if recorder is configured)
+	http.Handle("/record/status", enableCORS(conf.CorsOrigin, http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		internal.HandleRecordStatus(w, r, recorder)
+	})))
+
+	if recorder != nil {
+		http.Handle("/record/start", enableCORS(conf.CorsOrigin, http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			internal.HandleRecordStart(w, r, recorder)
+		})))
+
+		http.Handle("/record/stop", enableCORS(conf.CorsOrigin, http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			internal.HandleRecordStop(w, r, recorder)
+		})))
+
+		http.Handle("/record/list", enableCORS(conf.CorsOrigin, http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			internal.HandleRecordList(w, r, recorder)
+		})))
+
+		http.Handle("/record/download/", enableCORS(conf.CorsOrigin, http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			internal.HandleRecordDownload(w, r, recorder)
+		})))
+	}
 
 	port := fmt.Sprintf(":%d", conf.Addr)
 	server := &http.Server{
@@ -108,6 +140,11 @@ func main() {
 	// Stop camera
 	if err := cameraManager.Stop(); err != nil {
 		log.Printf("Camera stop error: %v", err)
+	}
+
+	// Shutdown recorder
+	if recorder != nil {
+		recorder.Shutdown()
 	}
 
 	// Close all peer connections and wait for cleanup

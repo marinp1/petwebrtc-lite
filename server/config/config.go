@@ -10,12 +10,13 @@ import (
 )
 
 type ServerConfig struct {
-	Addr       int
-	Width      int
-	Height     int
-	Framerate  int
-	Rotation   int
-	CorsOrigin string
+	Addr         int
+	Width        int
+	Height       int
+	Framerate    int
+	Rotation     int
+	CorsOrigin   string
+	RecordingDir string // Optional: directory for recording files (must exist and be writable)
 }
 
 // ParseConfig loads configuration from the given file path (TOML-like, key=value per line).
@@ -69,6 +70,8 @@ func ParseConfig(path string) *ServerConfig {
 				}
 			case "cors_origin":
 				conf.CorsOrigin = val
+			case "recording_dir":
+				conf.RecordingDir = val
 			}
 		}
 	}
@@ -114,10 +117,37 @@ func (c *ServerConfig) Validate() {
 	if c.CorsOrigin == "*" {
 		log.Println("WARNING: CORS origin set to '*' - this is insecure for production")
 	}
+
+	// Validate recording directory if set
+	if c.RecordingDir != "" {
+		info, err := os.Stat(c.RecordingDir)
+		if err != nil {
+			log.Printf("WARNING: Recording directory %q does not exist or is not accessible: %v", c.RecordingDir, err)
+			c.RecordingDir = "" // Disable recording
+		} else if !info.IsDir() {
+			log.Printf("WARNING: Recording path %q is not a directory", c.RecordingDir)
+			c.RecordingDir = "" // Disable recording
+		} else {
+			// Test if writable by creating a temp file
+			testFile := c.RecordingDir + "/.write_test"
+			if f, err := os.Create(testFile); err != nil {
+				log.Printf("WARNING: Recording directory %q is not writable: %v", c.RecordingDir, err)
+				c.RecordingDir = "" // Disable recording
+			} else {
+				f.Close()
+				os.Remove(testFile)
+				log.Printf("Recording enabled: %s", c.RecordingDir)
+			}
+		}
+	}
 }
 
 // String returns a formatted string representation of the config for logging
 func (c *ServerConfig) String() string {
-	return fmt.Sprintf("Port=%d, Resolution=%dx%d@%dfps, Rotation=%d°, CORS=%s",
-		c.Addr, c.Width, c.Height, c.Framerate, c.Rotation, c.CorsOrigin)
+	recording := "disabled"
+	if c.RecordingDir != "" {
+		recording = c.RecordingDir
+	}
+	return fmt.Sprintf("Port=%d, Resolution=%dx%d@%dfps, Rotation=%d°, CORS=%s, Recording=%s",
+		c.Addr, c.Width, c.Height, c.Framerate, c.Rotation, c.CorsOrigin, recording)
 }
