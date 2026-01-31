@@ -50,6 +50,37 @@
   display: flex;
 }
 
+/* Reconnect button - only visible when disconnected/failed */
+.reconnect-button {
+  display: none;
+  padding: 6px 12px;
+  border-radius: 6px;
+  border: 1px solid currentColor;
+  background: rgba(255, 255, 255, 0.1);
+  color: inherit;
+  font-size: 0.9em;
+  font-weight: 600;
+  cursor: pointer;
+  pointer-events: auto;
+  transition: all 150ms ease;
+  margin-left: 4px;
+}
+
+.reconnect-button:hover {
+  background: rgba(255, 255, 255, 0.2);
+  transform: scale(1.05);
+}
+
+.reconnect-button:active {
+  transform: scale(0.95);
+}
+
+/* Show reconnect button only when disconnected or failed */
+.connection-banner[data-status="disconnected"] .reconnect-button,
+.connection-banner[data-status="failed"] .reconnect-button {
+  display: inline-block;
+}
+
 /* Show banner when degraded (move to bottom) */
 .connection-banner[data-status="connected"][data-health="poor"],
 .connection-banner[data-status="connected"][data-health="degraded"] {

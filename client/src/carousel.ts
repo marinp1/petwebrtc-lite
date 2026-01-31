@@ -256,6 +256,23 @@ export class Carousel {
   }
 
   /**
+   * Force reconnect to a specific camera
+   */
+  async reconnect(index: number): Promise<RTCPeerConnection | null> {
+    console.log(`Force reconnecting to camera ${index + 1}`);
+
+    // Close existing connection if it exists
+    const existingPc = this.connections.get(index);
+    if (existingPc) {
+      existingPc.close();
+      this.connections.delete(index);
+    }
+
+    // Create new connection
+    return await this.ensureConnection(index);
+  }
+
+  /**
    * Initialize the carousel by connecting to the current camera and preloading adjacent
    */
   async initialize(): Promise<void> {

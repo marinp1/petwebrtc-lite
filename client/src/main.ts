@@ -52,7 +52,18 @@ for (let i = 0; i < cameraCount; i++) {
   const bannerText = document.createElement("span");
   bannerText.className = "banner-text";
 
-  connectionBanner.append(bannerIcon, bannerText);
+  const reconnectButton = document.createElement("button");
+  reconnectButton.className = "reconnect-button";
+  reconnectButton.textContent = "Reconnect";
+  reconnectButton.setAttribute("aria-label", "Reconnect to camera");
+  reconnectButton.onclick = () => {
+    console.log(`Reconnect button clicked for camera ${i + 1}`);
+    carousel.reconnect(i).catch((err) => {
+      console.error(`Manual reconnect failed for camera ${i + 1}:`, err);
+    });
+  };
+
+  connectionBanner.append(bannerIcon, bannerText, reconnectButton);
 
   // Stats overlay (compact display when connected)
   const statsOverlay = document.createElement("div");
