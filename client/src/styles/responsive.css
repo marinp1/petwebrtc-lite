@@ -72,12 +72,24 @@
 
   main {
     height: 100vh;
-    padding: 6px;
+    padding: 0;
+    gap: 0;
     box-sizing: border-box;
   }
 
+  /* Hide navigation dots in landscape to maximize video space */
+  .carousel-nav {
+    display: none;
+  }
+
+  /* Container fills entire main area */
+  .container {
+    border-radius: 0;
+  }
+
+  /* Remove any height constraints - let it fill naturally */
   .media {
-    height: calc(100vh - 60px);
+    height: 100%;
   }
 
   .camera-video {
