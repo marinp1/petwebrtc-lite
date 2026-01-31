@@ -9,6 +9,7 @@
   main {
     padding: 8px;
     height: calc(100vh - 40px);
+    height: calc(100dvh - 40px);
   }
   .badge.title {
     font-size: 0.82rem;
@@ -63,15 +64,21 @@
   }
 
   body {
-    padding-left: 0;
-    padding-top: 0;
+    /* Reset padding to let safe areas be handled by viewport-fit=cover */
+    padding: 0;
+    /* Safe areas for notch on sides in landscape */
+    padding-left: env(safe-area-inset-left);
+    padding-right: env(safe-area-inset-right);
     padding-bottom: env(safe-area-inset-bottom);
+    /* Use dynamic viewport height for iOS */
     height: 100vh;
+    height: 100dvh;
     overflow: hidden;
   }
 
   main {
     height: 100vh;
+    height: 100dvh;
     padding: 0;
     gap: 0;
     box-sizing: border-box;
@@ -96,8 +103,18 @@
     object-fit: cover;
   }
 
+  /* Stats overlay positioned above safe area */
   .stats-overlay {
     top: auto;
-    bottom: 8px;
+    bottom: max(8px, env(safe-area-inset-bottom));
+    right: max(8px, env(safe-area-inset-right));
+  }
+
+  /* Connection banner also respects safe areas */
+  .connection-banner[data-status="connected"][data-health="poor"],
+  .connection-banner[data-status="connected"][data-health="degraded"] {
+    bottom: max(calc(var(--controls-height) + 50px), calc(env(safe-area-inset-bottom) + 42px));
+    left: max(8px, env(safe-area-inset-left));
+    right: max(8px, env(safe-area-inset-right));
   }
 }

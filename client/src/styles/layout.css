@@ -43,6 +43,7 @@
 main {
   box-sizing: border-box;
   height: calc(100vh - 44px);
+  height: calc(100dvh - 44px); /* Dynamic viewport height for iOS */
   padding: 10px;
   padding-bottom: calc(env(safe-area-inset-bottom) + 8px);
   overflow: hidden;

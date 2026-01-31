@@ -14,14 +14,17 @@
 }
 
 body {
-  /* Reset viewport sizing to avoid iOS 100dvh/dvw quirks */
+  /* Use dynamic viewport units for proper iOS Safari behavior */
   width: 100vw;
   min-height: 100vh;
+  min-height: 100dvh; /* Dynamic viewport height - adjusts with browser chrome */
   margin: 0;
   padding: 0;
   /* Reserve safe area space for iPhone notch/home indicator */
   padding-top: env(safe-area-inset-top);
   padding-bottom: env(safe-area-inset-bottom);
+  padding-left: env(safe-area-inset-left);
+  padding-right: env(safe-area-inset-right);
   overflow: hidden;
   /* Replace strong linear gradient with a single dark base + subtle vignette */
   background-color: #061017;
