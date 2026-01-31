@@ -13,6 +13,11 @@
         <p class="subtitle">Live camera feeds — mobile friendly</p>
       </div>
       <div class="actions">
+        <button id="record-button" class="btn btn-ghost" aria-pressed="false" hidden>
+          <span class="record-icon"></span>
+          <span class="record-label">Record</span>
+        </button>
+        <button id="recordings-button" class="btn btn-ghost" hidden>Recordings</button>
         <button id="recognisition-button" class="btn btn-ghost" aria-pressed="false">Recognize objects: loading...</button>
       </div>
     </header>
@@ -21,6 +26,14 @@
       <div id="container" class="container"></div>
       <div class="carousel-nav"></div>
     </main>
+
+    <dialog id="recordings-panel" class="recordings-dialog">
+      <header class="dialog-header">
+        <h2>Recordings</h2>
+        <button class="close-btn" aria-label="Close">&times;</button>
+      </header>
+      <div class="recordings-list"></div>
+    </dialog>
 
     <script type="module" src="/src/main.ts"></script>
   </body>

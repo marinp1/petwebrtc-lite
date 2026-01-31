@@ -8,4 +8,58 @@
   border: 1px solid rgba(255, 255, 255, 0.04);
   color: var(--muted);
   cursor: pointer;
+  transition: all 150ms ease;
+}
+
+.btn:hover {
+  background: rgba(255, 255, 255, 0.06);
+  border-color: rgba(255, 255, 255, 0.1);
+}
+
+.btn:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+/* Recording Button */
+#record-button {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+}
+
+#record-button .record-icon {
+  width: 10px;
+  height: 10px;
+  border-radius: 50%;
+  background: #6b7280;
+  transition: all 200ms ease;
+  flex-shrink: 0;
+}
+
+#record-button[aria-pressed="true"] .record-icon {
+  background: #ef4444;
+  animation: record-pulse 1.5s ease-in-out infinite;
+}
+
+#record-button[aria-pressed="true"] {
+  border-color: rgba(239, 68, 68, 0.4);
+  color: #ef4444;
+}
+
+#record-button .record-label {
+  font-variant-numeric: tabular-nums;
+  min-width: 44px;
+}
+
+@keyframes record-pulse {
+  0%,
+  100% {
+    opacity: 1;
+    transform: scale(1);
+  }
+  50% {
+    opacity: 0.6;
+    transform: scale(1.15);
+  }
 }

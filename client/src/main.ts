@@ -4,6 +4,13 @@ import { getCameraCount } from "./cameras";
 import { Carousel } from "./carousel";
 import { SwipeGestureHandler } from "./gestures";
 import { NavigationUI } from "./navigation";
+import {
+  formatDuration,
+  getRecordingStatus,
+  startRecording,
+  stopRecording,
+} from "./recording";
+import { RecordingsPanel } from "./recordings-panel";
 import { getStorage, setStorage } from "./storage";
 
 const cameraCount = await getCameraCount();
@@ -12,6 +19,12 @@ console.log("Found", cameraCount, "cameras");
 const container = document.querySelector<HTMLDivElement>(".container")!;
 const navContainer = document.querySelector<HTMLDivElement>(".carousel-nav")!;
 const recognisitionButton = document.getElementById("recognisition-button")!;
+const recordButton = document.getElementById(
+  "record-button",
+) as HTMLButtonElement | null;
+const recordingsButton = document.getElementById(
+  "recordings-button",
+) as HTMLButtonElement | null;
 
 // Initialize carousel
 const carousel = new Carousel(cameraCount, container);
@@ -124,4 +137,120 @@ void new NavigationUI(carousel, navContainer);
 // Initialize carousel connections (connect to current + preload adjacent)
 carousel.initialize().catch((err) => {
   console.error("Failed to initialize carousel:", err);
+});
+
+// Recording functionality
+let statusPollingId: number | null = null;
+let recordingsPanel: RecordingsPanel | null = null;
+
+function updateRecordButton(recording: boolean): void {
+  if (!recordButton) return;
+
+  recordButton.ariaPressed = String(recording);
+  recordButton.classList.toggle("recording", recording);
+
+  const label = recordButton.querySelector(".record-label");
+  if (label && !recording) {
+    label.textContent = "Record";
+  }
+}
+
+function startStatusPolling(): void {
+  if (statusPollingId) return;
+
+  statusPollingId = window.setInterval(async () => {
+    try {
+      const status = await getRecordingStatus();
+      updateRecordButton(status.recording);
+
+      // Update duration display while recording
+      if (status.recording && status.durationMs !== undefined) {
+        const label = recordButton?.querySelector(".record-label");
+        if (label) {
+          label.textContent = formatDuration(status.durationMs);
+        }
+      }
+
+      if (!status.recording) {
+        stopStatusPolling();
+      }
+    } catch (err) {
+      console.error("Failed to poll recording status:", err);
+    }
+  }, 1000);
+}
+
+function stopStatusPolling(): void {
+  if (statusPollingId) {
+    clearInterval(statusPollingId);
+    statusPollingId = null;
+  }
+}
+
+async function initRecording(): Promise<void> {
+  if (!recordButton || !recordingsButton) return;
+
+  try {
+    const status = await getRecordingStatus();
+
+    if (!status.available) {
+      console.log("Recording not available on server");
+      return;
+    }
+
+    // Show the buttons
+    recordButton.hidden = false;
+    recordingsButton.hidden = false;
+
+    // Update initial state
+    updateRecordButton(status.recording);
+
+    // Start polling if already recording
+    if (status.recording) {
+      startStatusPolling();
+    }
+
+    // Record button click handler
+    recordButton.onclick = async (ev) => {
+      ev.preventDefault();
+      recordButton.disabled = true;
+
+      try {
+        const currentStatus = await getRecordingStatus();
+
+        if (currentStatus.recording) {
+          await stopRecording();
+          updateRecordButton(false);
+          stopStatusPolling();
+        } else {
+          await startRecording();
+          updateRecordButton(true);
+          startStatusPolling();
+        }
+      } catch (err) {
+        console.error("Recording error:", err);
+        alert(`Recording error: ${err instanceof Error ? err.message : err}`);
+      } finally {
+        recordButton.disabled = false;
+      }
+    };
+
+    // Initialize recordings panel
+    recordingsPanel = new RecordingsPanel();
+
+    // Recordings button click handler
+    recordingsButton.onclick = async (ev) => {
+      ev.preventDefault();
+      if (recordingsPanel) {
+        await recordingsPanel.open();
+      }
+    };
+  } catch (err) {
+    console.error("Failed to initialize recording:", err);
+  }
+}
+
+// Initialize recording UI
+initRecording().catch((err) => {
+  console.error("Recording initialization error:", err);
 });

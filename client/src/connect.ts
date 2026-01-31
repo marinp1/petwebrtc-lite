@@ -185,7 +185,9 @@ export async function startStream(videoFeedConfig: {
       }
 
       if (state === "connected") {
-        updateConnectionStatus(connectionElement, "connected", { healthStatus });
+        updateConnectionStatus(connectionElement, "connected", {
+          healthStatus,
+        });
         startTimer();
         connectionAttempts = 0;
       } else if (state === "connecting") {
