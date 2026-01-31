@@ -39,6 +39,14 @@ func HandleOffer(w http.ResponseWriter, r *http.Request, api *webrtc.API, cm *Cl
 		return
 	}
 
+	// Ensure cleanup on error paths
+	var setupComplete bool
+	defer func() {
+		if !setupComplete {
+			peerConn.Close()
+		}
+	}()
+
 	videoTrack, err := webrtc.NewTrackLocalStaticRTP(
 		webrtc.RTPCodecCapability{MimeType: webrtc.MimeTypeH264},
 		"video", "rpi-camera",
@@ -47,7 +55,12 @@ func HandleOffer(w http.ResponseWriter, r *http.Request, api *webrtc.API, cm *Cl
 		http.Error(w, "failed to create track", http.StatusInternalServerError)
 		return
 	}
-	_, _ = peerConn.AddTrack(videoTrack)
+
+	if _, err := peerConn.AddTrack(videoTrack); err != nil {
+		log.Printf("Failed to add track: %v", err)
+		http.Error(w, "failed to add track", http.StatusInternalServerError)
+		return
+	}
 
 	// pass framerate so client timestamps increment consistently
 	client := NewClient(peerConn, videoTrack, nil, conf.Framerate)
@@ -105,7 +118,12 @@ func HandleOffer(w http.ResponseWriter, r *http.Request, api *webrtc.API, cm *Cl
 		http.Error(w, "failed to create answer", http.StatusInternalServerError)
 		return
 	}
-	_ = peerConn.SetLocalDescription(answer)
+
+	if err := peerConn.SetLocalDescription(answer); err != nil {
+		log.Printf("Failed to set local description: %v", err)
+		http.Error(w, "failed to set local description", http.StatusInternalServerError)
+		return
+	}
 
 	// Wait for ICE candidates (grow timeout to be more tolerant on slow networks)
 	done := make(chan struct{})
@@ -119,6 +137,11 @@ func HandleOffer(w http.ResponseWriter, r *http.Request, api *webrtc.API, cm *Cl
 	case <-time.After(5 * time.Second): // increased timeout
 	}
 
+	// Mark setup as complete to prevent cleanup
+	setupComplete = true
+
 	w.Header().Set("Content-Type", "application/json")
-	_ = json.NewEncoder(w).Encode(peerConn.LocalDescription())
+	if err := json.NewEncoder(w).Encode(peerConn.LocalDescription()); err != nil {
+		log.Printf("Failed to encode answer: %v", err)
+	}
 }
