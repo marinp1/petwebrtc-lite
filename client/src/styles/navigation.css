@@ -1,0 +1,95 @@
+/* Navigation: Carousel Arrows and Indicator Dots */
+
+/* Navigation container */
+.carousel-nav {
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  padding: 8px 0;
+  min-height: 36px;
+}
+
+/* Indicator dots */
+.carousel-indicators {
+  display: flex;
+  gap: 8px;
+  align-items: center;
+  justify-content: center;
+}
+
+.indicator-dot {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  background: rgba(255, 255, 255, 0.3);
+  border: none;
+  padding: 0;
+  cursor: pointer;
+  transition: all 200ms ease;
+}
+
+.indicator-dot:hover {
+  background: rgba(255, 255, 255, 0.5);
+  transform: scale(1.2);
+}
+
+.indicator-dot.active {
+  background: var(--accent);
+  width: 24px;
+  border-radius: 4px;
+}
+
+/* Arrow buttons */
+.carousel-arrow {
+  position: absolute;
+  top: 50%;
+  transform: translateY(-50%);
+  background: rgba(0, 0, 0, 0.6);
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  border-radius: 50%;
+  width: 44px;
+  height: 44px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+  z-index: 100;
+  color: white;
+  transition: all 200ms ease;
+  opacity: 0;
+}
+
+.carousel-arrow:hover {
+  background: rgba(0, 0, 0, 0.8);
+  border-color: rgba(255, 255, 255, 0.2);
+}
+
+.carousel-arrow.disabled {
+  opacity: 0.3;
+  cursor: not-allowed;
+}
+
+.carousel-arrow-prev {
+  left: 16px;
+}
+
+.carousel-arrow-next {
+  right: 16px;
+}
+
+/* Show arrows on hover (desktop) */
+@media (hover: hover) and (pointer: fine) {
+  main:hover .carousel-arrow:not(.disabled) {
+    opacity: 0.8;
+  }
+  .carousel-arrow:hover:not(.disabled) {
+    opacity: 1;
+  }
+}
+
+/* Always show arrows on touch devices */
+@media (hover: none) {
+  .carousel-arrow:not(.disabled) {
+    opacity: 0.6;
+  }
+}

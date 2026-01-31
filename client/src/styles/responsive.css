@@ -1,0 +1,91 @@
+/* Responsive: Media Queries for Mobile and Landscape */
+
+/* Small screens (iPhone) */
+@media (max-width: 420px) {
+  .topbar {
+    height: 40px;
+    padding: 0 8px;
+  }
+  main {
+    padding: 8px;
+    height: calc(100vh - 40px);
+  }
+  .badge.title {
+    font-size: 0.82rem;
+    padding: 3px 6px;
+  }
+  .btn {
+    padding: 6px;
+    font-size: 0.86rem;
+  }
+  .carousel-arrow {
+    width: 36px;
+    height: 36px;
+  }
+  .connection-banner {
+    font-size: 0.88rem;
+    padding: 8px 12px;
+  }
+  .stats-overlay {
+    font-size: 0.85rem;
+    padding: 5px 8px;
+  }
+}
+
+/* Mobile and landscape adjustments */
+@media (max-width: 640px), (orientation: landscape) {
+  :root {
+    --topbar-height: 44px;
+  }
+  .topbar {
+    height: var(--topbar-height);
+    padding: 6px 10px;
+  }
+  .camera-video {
+    object-fit: contain;
+  }
+  .btn {
+    padding: 6px 10px;
+    font-size: 0.95rem;
+  }
+  .brand .subtitle {
+    display: none;
+  }
+}
+
+/* Mobile landscape - hide topbar and maximize video */
+@media (max-width: 900px) and (orientation: landscape) {
+  .topbar {
+    display: none;
+    height: 0;
+    padding: 0;
+    margin: 0;
+  }
+
+  body {
+    padding-left: 0;
+    padding-top: 0;
+    padding-bottom: env(safe-area-inset-bottom);
+    height: 100vh;
+    overflow: hidden;
+  }
+
+  main {
+    height: 100vh;
+    padding: 6px;
+    box-sizing: border-box;
+  }
+
+  .media {
+    height: calc(100vh - 60px);
+  }
+
+  .camera-video {
+    object-fit: cover;
+  }
+
+  .stats-overlay {
+    top: auto;
+    bottom: 8px;
+  }
+}

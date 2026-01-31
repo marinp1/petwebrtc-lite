@@ -2,6 +2,31 @@ import { startObjectDetection } from "./detector";
 import { getStorage } from "./storage";
 
 /**
+ * Helper function to update connection status with detailed state attributes
+ */
+const updateConnectionStatus = (
+  element: HTMLElement,
+  state: string,
+  details?: {
+    isReconnecting?: boolean;
+    attemptNumber?: number;
+    healthStatus?: string;
+  },
+) => {
+  element.setAttribute("data-status", state);
+  if (details?.isReconnecting) {
+    element.setAttribute("data-reconnecting", "true");
+    element.setAttribute("data-attempts", String(details.attemptNumber || 1));
+  } else {
+    element.removeAttribute("data-reconnecting");
+    element.removeAttribute("data-attempts");
+  }
+  if (details?.healthStatus) {
+    element.setAttribute("data-health", details.healthStatus);
+  }
+};
+
+/**
  * Start a WebRTC stream from the given video feed configuration.
  * Sets up a RTCPeerConnection, handles ICE candidates, and manages the video element.
  *
@@ -37,6 +62,12 @@ export async function startStream(videoFeedConfig: {
     // Timer state for "time connected" badge
     let timerId: number | null = null;
     let connectedSince: number | null = null;
+
+    // Connection state tracking
+    let connectionAttempts = 0;
+    let lastConnectionState: RTCPeerConnectionState | null = null;
+    let previousDroppedFrames = 0;
+    let healthStatus: "healthy" | "degraded" | "poor" = "healthy";
 
     const formatTime = (s: number) => {
       const mm = Math.floor(s / 60)
@@ -80,9 +111,31 @@ export async function startStream(videoFeedConfig: {
       // Expect JSON: { sentFrames: number, droppedFrames: number, timestamp: number }
       try {
         const stats = JSON.parse(event.data);
-        if (typeof stats.droppedFrames === "number" && droppedElement) {
-          // use the numeric droppedFrames value directly (no regex/parsing)
-          droppedElement.textContent = String(stats.droppedFrames);
+        if (typeof stats.droppedFrames === "number") {
+          const dropped = stats.droppedFrames;
+          const sent = stats.sentFrames || 1;
+          const recentDrops = dropped - previousDroppedFrames;
+          const dropRate = dropped / sent;
+
+          // Calculate health status based on drop rate and recent drops
+          if (dropRate > 0.1 || recentDrops > 30) {
+            healthStatus = "poor";
+          } else if (dropRate > 0.02 || recentDrops > 10) {
+            healthStatus = "degraded";
+          } else {
+            healthStatus = "healthy";
+          }
+
+          // Update UI elements
+          if (droppedElement) {
+            droppedElement.textContent = String(dropped);
+            droppedElement.setAttribute("data-health", healthStatus);
+          }
+          if (pc.connectionState === "connected") {
+            connectionElement.setAttribute("data-health", healthStatus);
+          }
+
+          previousDroppedFrames = dropped;
         }
       } catch (e) {
         console.error(`Error parsing stats:`, e);
@@ -122,20 +175,39 @@ export async function startStream(videoFeedConfig: {
     pc.onconnectionstatechange = () => {
       console.log("Connection state:", pc.connectionState);
       const state = pc.connectionState;
+
+      // Detect reconnection (was connected, now connecting)
+      const isReconnecting =
+        lastConnectionState === "connected" && state === "connecting";
+
+      if (isReconnecting) {
+        connectionAttempts++;
+      }
+
       if (state === "connected") {
-        connectionElement.setAttribute("data-status", "connected");
+        updateConnectionStatus(connectionElement, "connected", { healthStatus });
         startTimer();
-      } else if (
-        state === "failed" ||
-        state === "disconnected" ||
-        state === "closed"
-      ) {
-        connectionElement.setAttribute("data-status", "disconnected");
+        connectionAttempts = 0;
+      } else if (state === "connecting") {
+        updateConnectionStatus(connectionElement, "connecting", {
+          isReconnecting,
+          attemptNumber: connectionAttempts,
+        });
+        if (!isReconnecting) {
+          stopTimer(true);
+        }
+      } else if (state === "failed") {
+        updateConnectionStatus(connectionElement, "failed");
+        stopTimer(true);
+      } else if (state === "disconnected" || state === "closed") {
+        updateConnectionStatus(connectionElement, "disconnected");
         stopTimer(true);
       } else {
-        // other states (checking, connecting) -> show disconnected icon
-        connectionElement.setAttribute("data-status", "disconnected");
+        // Handle "new" state or any other states
+        updateConnectionStatus(connectionElement, "disconnected");
       }
+
+      lastConnectionState = state;
     };
 
     pc.oniceconnectionstatechange = () => {

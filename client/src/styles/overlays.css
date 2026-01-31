@@ -1,0 +1,238 @@
+/* Overlays: Badges, Connection Banner, Stats Overlay, Animations */
+
+/* Title badge - top-left overlay */
+.carousel-slide .title {
+  position: absolute;
+  top: 8px;
+  left: 8px;
+  z-index: 80;
+  pointer-events: none;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.badge.title {
+  background: rgba(0, 0, 0, 0.45);
+  color: var(--accent);
+  padding: 4px 8px;
+  border-radius: 6px;
+  font-weight: 600;
+  font-size: 0.86rem;
+}
+
+/* Connection Banner - Prominent status display */
+.connection-banner {
+  position: absolute;
+  top: 8px;
+  left: 50%;
+  transform: translateX(-50%);
+  z-index: 200;
+  display: none;
+  align-items: center;
+  gap: 8px;
+  padding: 10px 16px;
+  border-radius: 8px;
+  background: rgba(0, 0, 0, 0.85);
+  backdrop-filter: blur(8px);
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  font-size: 0.95rem;
+  font-weight: 600;
+  color: white;
+  pointer-events: none;
+  max-width: 90%;
+}
+
+/* Show banner for non-connected states */
+.connection-banner[data-status="connecting"],
+.connection-banner[data-status="disconnected"],
+.connection-banner[data-status="failed"] {
+  display: flex;
+}
+
+/* Show banner when degraded (move to bottom) */
+.connection-banner[data-status="connected"][data-health="poor"],
+.connection-banner[data-status="connected"][data-health="degraded"] {
+  display: flex;
+  top: auto;
+  bottom: calc(var(--controls-height) + 50px);
+  left: 8px;
+  right: 8px;
+  transform: none;
+}
+
+/* Connecting - yellow with pulse */
+.connection-banner[data-status="connecting"] {
+  border-color: #fbbf24;
+  background: rgba(251, 191, 36, 0.15);
+  color: #fbbf24;
+  animation: pulse 2s ease-in-out infinite;
+}
+
+.connection-banner[data-status="connecting"] .banner-icon::before {
+  content: "⟳";
+  animation: spin 1.5s linear infinite;
+}
+
+.connection-banner[data-reconnecting="true"] .banner-text::after {
+  content: " (attempt " attr(data-attempts) ")";
+  opacity: 0.7;
+  font-size: 0.85em;
+}
+
+/* Disconnected/Failed - red, prominent */
+.connection-banner[data-status="disconnected"],
+.connection-banner[data-status="failed"] {
+  border-color: #ef4444;
+  background: rgba(239, 68, 68, 0.15);
+  color: #ef4444;
+  padding: 12px 18px;
+  font-size: 1.05rem;
+}
+
+.connection-banner[data-status="failed"] .banner-icon::before {
+  content: "✕";
+}
+
+.connection-banner[data-status="failed"] .banner-text::before {
+  content: "Failed to connect";
+}
+
+.connection-banner[data-status="disconnected"] .banner-icon::before {
+  content: "⊗";
+}
+
+.connection-banner[data-status="disconnected"] .banner-text::before {
+  content: "Connection lost";
+}
+
+.connection-banner[data-status="connecting"] .banner-text::before {
+  content: "Connecting...";
+}
+
+.connection-banner[data-reconnecting="true"] .banner-text::before {
+  content: "Reconnecting...";
+}
+
+/* Degraded - orange warning */
+.connection-banner[data-health="degraded"] {
+  border-color: #fb923c;
+  background: rgba(251, 146, 60, 0.15);
+  color: #fb923c;
+}
+
+.connection-banner[data-health="poor"] {
+  border-color: #f97316;
+  background: rgba(249, 115, 22, 0.2);
+  color: #f97316;
+}
+
+.connection-banner[data-health="degraded"] .banner-icon::before,
+.connection-banner[data-health="poor"] .banner-icon::before {
+  content: "⚠";
+}
+
+.connection-banner[data-health="degraded"] .banner-text::before {
+  content: "Stream degraded";
+}
+
+.connection-banner[data-health="poor"] .banner-text::before {
+  content: "Poor connection quality";
+}
+
+/* Stats Overlay - Compact display when connected */
+.stats-overlay {
+  position: absolute;
+  top: 8px;
+  right: 8px;
+  z-index: 210;
+  display: none;
+  align-items: center;
+  gap: 8px;
+  padding: 6px 10px;
+  border-radius: 20px;
+  background: rgba(0, 0, 0, 0.65);
+  backdrop-filter: blur(4px);
+  font-size: 0.9rem;
+  font-weight: 700;
+  color: white;
+  pointer-events: none;
+}
+
+/* Show stats when connected and healthy/degraded (not when showing warning banner) */
+.carousel-slide .connection-banner[data-status="connected"]:not([data-health="poor"]):not([data-health="degraded"]) ~ .stats-overlay {
+  display: flex;
+}
+
+/* Also show stats when connected with warning banner */
+.carousel-slide .connection-banner[data-status="connected"][data-health="poor"] ~ .stats-overlay,
+.carousel-slide .connection-banner[data-status="connected"][data-health="degraded"] ~ .stats-overlay {
+  display: flex;
+}
+
+/* Health Indicator - Colored dot */
+.health-indicator {
+  width: 10px;
+  height: 10px;
+  border-radius: 50%;
+  background: #4ade80;
+  transition: background 300ms ease;
+}
+
+.health-indicator[data-health="degraded"] {
+  background: #fb923c;
+  animation: pulse-slow 3s ease-in-out infinite;
+}
+
+.health-indicator[data-health="poor"] {
+  background: #f97316;
+  animation: pulse-fast 1.5s ease-in-out infinite;
+}
+
+/* Uptime Display */
+.uptime-display {
+  font-variant-numeric: tabular-nums;
+  color: #a7f3d0;
+  letter-spacing: 0.5px;
+  min-width: 42px;
+}
+
+/* Dropped Frames - Show on hover or when degraded */
+.dropped-display {
+  display: none;
+  font-variant-numeric: tabular-nums;
+  color: #ffd166;
+  font-size: 0.85rem;
+}
+
+.stats-overlay:hover .dropped-display,
+.dropped-display[data-health="degraded"],
+.dropped-display[data-health="poor"] {
+  display: inline-block;
+}
+
+.dropped-display::before {
+  content: "↓";
+  margin-right: 2px;
+}
+
+/* Animations */
+@keyframes pulse {
+  0%, 100% { opacity: 1; }
+  50% { opacity: 0.6; }
+}
+
+@keyframes pulse-slow {
+  0%, 100% { opacity: 1; transform: scale(1); }
+  50% { opacity: 0.7; transform: scale(1.15); }
+}
+
+@keyframes pulse-fast {
+  0%, 100% { opacity: 1; transform: scale(1); }
+  50% { opacity: 0.5; transform: scale(1.25); }
+}
+
+@keyframes spin {
+  from { transform: rotate(0deg); }
+  to { transform: rotate(360deg); }
+}

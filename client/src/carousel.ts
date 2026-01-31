@@ -4,9 +4,9 @@ import { getStorage, setStorage } from "./storage";
 interface VideoElements {
   videoElement: HTMLVideoElement;
   container: HTMLElement;
-  connectionElement: HTMLElement;
-  droppedElement: HTMLElement;
-  timeElement: HTMLElement;
+  connectionElement: HTMLElement; // Now connection-banner
+  droppedElement: HTMLElement; // Now dropped-display
+  timeElement: HTMLElement; // Now uptime-display
 }
 
 export class Carousel {

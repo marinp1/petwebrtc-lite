@@ -1,0 +1,52 @@
+/* Layout: Topbar, Brand, Actions, Main Container */
+
+/* Topbar — make compact, single-line and robust on mobile */
+.topbar {
+  /* tighten spacing and height */
+  height: 44px;
+  padding: 0 10px;
+  gap: 8px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  /* subtle translucent background + thin border; avoid heavy blur */
+  background: rgba(0, 0, 0, 0.28);
+  border-bottom: 1px solid rgba(255, 255, 255, 0.04);
+  backdrop-filter: blur(4px); /* allowed where supported, harmless otherwise */
+  box-shadow: none;
+  position: sticky;
+  top: 0;
+  z-index: 50;
+}
+
+/* Brand — one line, smaller and tighter */
+.brand h1 {
+  margin: 0;
+  font-size: 0.92rem;
+  font-weight: 600;
+  letter-spacing: 0.2px;
+  color: var(--accent);
+  line-height: 1;
+}
+.brand .subtitle {
+  display: none; /* hide subtitle to reduce vertical clutter on phones */
+}
+
+/* Actions — compact buttons (icon-friendly) */
+.actions {
+  display: flex;
+  gap: 8px;
+  align-items: center;
+}
+
+/* Main container */
+main {
+  box-sizing: border-box;
+  height: calc(100vh - 44px);
+  padding: 10px;
+  padding-bottom: calc(env(safe-area-inset-bottom) + 8px);
+  overflow: hidden;
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}

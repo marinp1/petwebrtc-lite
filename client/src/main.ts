@@ -41,26 +41,37 @@ for (let i = 0; i < cameraCount; i++) {
   videoElement.title = `Camera ${i + 1}`;
   videoElement.className = "camera-video";
 
-  const statusContainer = document.createElement("div");
-  statusContainer.className = "status badges";
+  // Connection status banner (for prominent state display)
+  const connectionBanner = document.createElement("div");
+  connectionBanner.className = "connection-banner";
+  connectionBanner.setAttribute("data-status", "disconnected");
 
-  // connection badge (icon only; text hidden by CSS)
-  const connectionElement = document.createElement("span");
-  connectionElement.className = "badge connection";
-  connectionElement.setAttribute("data-status", "disconnected");
-  connectionElement.textContent = ""; // visual is the dot, text not needed
+  const bannerIcon = document.createElement("span");
+  bannerIcon.className = "banner-icon";
 
-  // dropped frames badge (number only)
-  const droppedElement = document.createElement("span");
-  droppedElement.className = "badge dropped";
-  droppedElement.textContent = "0";
+  const bannerText = document.createElement("span");
+  bannerText.className = "banner-text";
 
-  // time connected badge (MM:SS)
-  const timeElement = document.createElement("span");
-  timeElement.className = "badge time";
-  timeElement.textContent = "00:00";
+  connectionBanner.append(bannerIcon, bannerText);
 
-  statusContainer.append(connectionElement, droppedElement, timeElement);
+  // Stats overlay (compact display when connected)
+  const statsOverlay = document.createElement("div");
+  statsOverlay.className = "stats-overlay";
+
+  const healthIndicator = document.createElement("span");
+  healthIndicator.className = "health-indicator";
+  healthIndicator.setAttribute("data-health", "healthy");
+
+  const uptimeDisplay = document.createElement("span");
+  uptimeDisplay.className = "uptime-display";
+  uptimeDisplay.textContent = "00:00";
+
+  const droppedDisplay = document.createElement("span");
+  droppedDisplay.className = "dropped-display";
+  droppedDisplay.textContent = "0";
+  droppedDisplay.setAttribute("data-health", "healthy");
+
+  statsOverlay.append(healthIndicator, uptimeDisplay, droppedDisplay);
 
   // Carousel slide container
   const slideContainer = document.createElement("div");
@@ -79,16 +90,17 @@ for (let i = 0; i < cameraCount; i++) {
 
   slideContainer.appendChild(media);
   slideContainer.appendChild(titleElement);
-  slideContainer.appendChild(statusContainer);
+  slideContainer.appendChild(connectionBanner);
+  slideContainer.appendChild(statsOverlay);
   container.appendChild(slideContainer);
 
   // Register camera with carousel
   carousel.registerCamera(i, {
     videoElement,
     container: slideContainer,
-    connectionElement,
-    droppedElement,
-    timeElement,
+    connectionElement: connectionBanner,
+    droppedElement: droppedDisplay,
+    timeElement: uptimeDisplay,
   });
 }
 
