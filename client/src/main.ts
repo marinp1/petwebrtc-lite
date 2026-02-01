@@ -145,10 +145,8 @@ let recordingsPanel: RecordingsPanel | null = null;
 
 function updateRecordButton(recording: boolean): void {
   if (!recordButton) return;
-
   recordButton.ariaPressed = String(recording);
   recordButton.classList.toggle("recording", recording);
-
   const label = recordButton.querySelector(".record-label");
   if (label && !recording) {
     label.textContent = "Record";
@@ -190,28 +188,55 @@ function stopStatusPolling(): void {
 
 async function initRecording(): Promise<void> {
   if (!recordButton || !recordingsButton) return;
-
   try {
-    // Check recording availability on the current camera
-    const currentCameraIndex = carousel.getCurrentIndex();
-    const status = await getRecordingStatus(currentCameraIndex);
+    // Check recording availability on all cameras
+    const availabilityChecks = [];
+    for (let i = 0; i < cameraCount; i++) {
+      availabilityChecks.push(
+        getRecordingStatus(i).catch(() => ({
+          available: false,
+          recording: false,
+        })),
+      );
+    }
 
-    if (!status.available) {
-      console.log("Recording not available on server");
+    const statuses = await Promise.all(availabilityChecks);
+    const availableCameras = statuses.filter((s) => s.available).length;
+
+    if (availableCameras === 0) {
+      recordButton.style.display = "none";
       return;
     }
+
+    console.log(`Recording available on ${availableCameras} camera(s)`);
 
     // Show the buttons
     recordButton.hidden = false;
     recordingsButton.hidden = false;
 
-    // Update initial state
-    updateRecordButton(status.recording);
+    // Function to update recording button for current camera
+    const updateForCurrentCamera = async () => {
+      const currentCameraIndex = carousel.getCurrentIndex();
+      const status = await getRecordingStatus(currentCameraIndex).catch(() => ({
+        available: false,
+        recording: false,
+      }));
 
-    // Start polling if already recording
-    if (status.recording) {
-      startStatusPolling();
-    }
+      // Hide/show button based on current camera's support
+      recordButton.style.display = status.available ? "" : "none";
+
+      if (status.available) {
+        updateRecordButton(status.recording);
+        if (status.recording) {
+          startStatusPolling();
+        }
+      } else {
+        stopStatusPolling();
+      }
+    };
+
+    // Update for initial camera
+    await updateForCurrentCamera();
 
     // Record button click handler
     recordButton.onclick = async (ev) => {
@@ -239,15 +264,12 @@ async function initRecording(): Promise<void> {
       }
     };
 
-    // Initialize recordings panel with current camera
-    recordingsPanel = new RecordingsPanel(currentCameraIndex);
+    // Initialize recordings panel
+    recordingsPanel = new RecordingsPanel(cameraCount);
 
-    // Update recordings panel when camera changes
-    carousel.onIndexChange((newIndex) => {
-      recordingsPanel = new RecordingsPanel(newIndex);
-      // Stop polling when switching cameras to avoid stale status
-      stopStatusPolling();
-      updateRecordButton(false);
+    // Update when camera changes
+    carousel.onIndexChange(async () => {
+      await updateForCurrentCamera();
     });
 
     // Recordings button click handler

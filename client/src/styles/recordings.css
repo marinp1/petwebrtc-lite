@@ -88,6 +88,36 @@
   color: #ef4444;
 }
 
+/* Camera Recordings Section */
+.camera-recordings-section {
+  margin-bottom: 24px;
+}
+
+.camera-recordings-section:last-child {
+  margin-bottom: 0;
+}
+
+.camera-recordings-section h3 {
+  margin: 0 0 12px 0;
+  font-size: 0.95rem;
+  font-weight: 600;
+  color: var(--text-main);
+  opacity: 0.9;
+}
+
+.camera-recordings-section .unavailable,
+.camera-recordings-section .empty-camera {
+  color: var(--muted);
+  font-size: 0.85rem;
+  padding: 8px 0;
+  margin: 0;
+}
+
+.camera-recordings-section .unavailable {
+  opacity: 0.6;
+  font-style: italic;
+}
+
 /* Recordings Table */
 .recordings-table {
   width: 100%;
