@@ -12,8 +12,10 @@ export class RecordingsPanel {
   private dialog: HTMLDialogElement;
   private listContainer: HTMLDivElement;
   private refreshInterval: number | null = null;
+  private cameraIndex: number;
 
-  constructor() {
+  constructor(cameraIndex: number) {
+    this.cameraIndex = cameraIndex;
     this.dialog = document.getElementById(
       "recordings-panel",
     ) as HTMLDialogElement;
@@ -62,7 +64,7 @@ export class RecordingsPanel {
 
   async refresh(): Promise<void> {
     try {
-      const recordings = await listRecordings();
+      const recordings = await listRecordings(this.cameraIndex);
       this.renderList(recordings);
     } catch (err) {
       console.error("Failed to fetch recordings:", err);
@@ -115,7 +117,7 @@ export class RecordingsPanel {
         <td>${dateStr}</td>
         <td>${durationStr}</td>
         <td>${sizeStr}</td>
-        <td><a href="${getDownloadUrl(recording.filename)}" class="download-link" download>Download</a></td>
+        <td><a href="${getDownloadUrl(this.cameraIndex, recording.filename)}" class="download-link" download>Download</a></td>
       `;
 
       tbody.appendChild(row);

@@ -18,8 +18,12 @@ export interface RecordingFile {
 }
 
 // Get current recording status
-export async function getRecordingStatus(): Promise<RecordingStatus> {
-  const response = await fetch("/record/status", { method: "GET" });
+export async function getRecordingStatus(
+  cameraIndex: number,
+): Promise<RecordingStatus> {
+  const response = await fetch(`/camera${cameraIndex + 1}/record/status`, {
+    method: "GET",
+  });
   if (!response.ok) {
     throw new Error(`Failed to get recording status: ${response.statusText}`);
   }
@@ -27,8 +31,12 @@ export async function getRecordingStatus(): Promise<RecordingStatus> {
 }
 
 // Start recording
-export async function startRecording(): Promise<RecordingStatus> {
-  const response = await fetch("/record/start", { method: "POST" });
+export async function startRecording(
+  cameraIndex: number,
+): Promise<RecordingStatus> {
+  const response = await fetch(`/camera${cameraIndex + 1}/record/start`, {
+    method: "POST",
+  });
   if (!response.ok) {
     const error = await response.text();
     throw new Error(
@@ -39,8 +47,12 @@ export async function startRecording(): Promise<RecordingStatus> {
 }
 
 // Stop recording
-export async function stopRecording(): Promise<RecordingStatus> {
-  const response = await fetch("/record/stop", { method: "POST" });
+export async function stopRecording(
+  cameraIndex: number,
+): Promise<RecordingStatus> {
+  const response = await fetch(`/camera${cameraIndex + 1}/record/stop`, {
+    method: "POST",
+  });
   if (!response.ok) {
     const error = await response.text();
     throw new Error(
@@ -51,8 +63,12 @@ export async function stopRecording(): Promise<RecordingStatus> {
 }
 
 // List all recordings
-export async function listRecordings(): Promise<RecordingFile[]> {
-  const response = await fetch("/record/list", { method: "GET" });
+export async function listRecordings(
+  cameraIndex: number,
+): Promise<RecordingFile[]> {
+  const response = await fetch(`/camera${cameraIndex + 1}/record/list`, {
+    method: "GET",
+  });
   if (!response.ok) {
     throw new Error(`Failed to list recordings: ${response.statusText}`);
   }
@@ -61,8 +77,8 @@ export async function listRecordings(): Promise<RecordingFile[]> {
 }
 
 // Get download URL for a recording
-export function getDownloadUrl(filename: string): string {
-  return `/record/download/${encodeURIComponent(filename)}`;
+export function getDownloadUrl(cameraIndex: number, filename: string): string {
+  return `/camera${cameraIndex + 1}/record/download/${encodeURIComponent(filename)}`;
 }
 
 // Format duration for display (MM:SS or HH:MM:SS)

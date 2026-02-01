@@ -160,7 +160,8 @@ function startStatusPolling(): void {
 
   statusPollingId = window.setInterval(async () => {
     try {
-      const status = await getRecordingStatus();
+      const currentCameraIndex = carousel.getCurrentIndex();
+      const status = await getRecordingStatus(currentCameraIndex);
       updateRecordButton(status.recording);
 
       // Update duration display while recording
@@ -191,7 +192,9 @@ async function initRecording(): Promise<void> {
   if (!recordButton || !recordingsButton) return;
 
   try {
-    const status = await getRecordingStatus();
+    // Check recording availability on the current camera
+    const currentCameraIndex = carousel.getCurrentIndex();
+    const status = await getRecordingStatus(currentCameraIndex);
 
     if (!status.available) {
       console.log("Recording not available on server");
@@ -216,14 +219,15 @@ async function initRecording(): Promise<void> {
       recordButton.disabled = true;
 
       try {
-        const currentStatus = await getRecordingStatus();
+        const currentCameraIndex = carousel.getCurrentIndex();
+        const currentStatus = await getRecordingStatus(currentCameraIndex);
 
         if (currentStatus.recording) {
-          await stopRecording();
+          await stopRecording(currentCameraIndex);
           updateRecordButton(false);
           stopStatusPolling();
         } else {
-          await startRecording();
+          await startRecording(currentCameraIndex);
           updateRecordButton(true);
           startStatusPolling();
         }
@@ -235,8 +239,16 @@ async function initRecording(): Promise<void> {
       }
     };
 
-    // Initialize recordings panel
-    recordingsPanel = new RecordingsPanel();
+    // Initialize recordings panel with current camera
+    recordingsPanel = new RecordingsPanel(currentCameraIndex);
+
+    // Update recordings panel when camera changes
+    carousel.onIndexChange((newIndex) => {
+      recordingsPanel = new RecordingsPanel(newIndex);
+      // Stop polling when switching cameras to avoid stale status
+      stopStatusPolling();
+      updateRecordButton(false);
+    });
 
     // Recordings button click handler
     recordingsButton.onclick = async (ev) => {
