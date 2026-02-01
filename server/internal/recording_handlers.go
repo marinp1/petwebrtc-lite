@@ -158,7 +158,9 @@ func HandleRecordDownload(w http.ResponseWriter, r *http.Request, recorder *Reco
 		return
 	}
 
-	w.Header().Set("Content-Type", "video/h264")
+	// Use application/octet-stream to prevent browser manipulation
+	// VLC and other players will recognize .h264 extension
+	w.Header().Set("Content-Type", "application/octet-stream")
 	w.Header().Set("Content-Disposition", "attachment; filename=\""+filename+"\"")
 	w.Header().Set("Content-Length", strconv.FormatInt(stat.Size(), 10))
 

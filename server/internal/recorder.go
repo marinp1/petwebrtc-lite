@@ -4,7 +4,10 @@ import (
 	"bufio"
 	"encoding/json"
 	"fmt"
+	"io"
+	"log"
 	"os"
+	"os/exec"
 	"path/filepath"
 	"sync"
 	"sync/atomic"
@@ -13,11 +16,12 @@ import (
 
 const writeBufferSize = 64 * 1024 // 64KB buffer to batch writes and reduce syscalls
 
-// RecorderManager handles H264 recording to file
+// RecorderManager handles H264 recording to MP4 file via ffmpeg
 type RecorderManager struct {
 	mu            sync.RWMutex
 	recording     atomic.Bool
-	file          *os.File
+	ffmpegCmd     *exec.Cmd
+	ffmpegStdin   io.WriteCloser
 	writer        *bufio.Writer // Buffered writer to reduce syscalls
 	filePath      string
 	startTime     time.Time
@@ -29,8 +33,9 @@ type RecorderManager struct {
 	wg            sync.WaitGroup
 
 	// Cached keyframes for starting recordings
-	lastSPS []byte
-	lastPPS []byte
+	lastSPS        []byte
+	lastPPS        []byte
+	waitingForIDR  bool // Flag to wait for keyframe before writing
 }
 
 // RecordingStatus represents the current recording state
@@ -68,7 +73,7 @@ func NewRecorderManager(recordingDir string) *RecorderManager {
 	}
 }
 
-// Start begins recording to a new file
+// Start begins recording to a new MP4 file via ffmpeg
 func (rm *RecorderManager) Start() (*RecordingStatus, error) {
 	rm.mu.Lock()
 	defer rm.mu.Unlock()
@@ -77,38 +82,66 @@ func (rm *RecorderManager) Start() (*RecordingStatus, error) {
 		return nil, fmt.Errorf("recording already in progress")
 	}
 
-	// Generate filename with timestamp: recording_20260131_143052.h264
-	timestamp := time.Now().Format("20060102_150405")
-	filename := fmt.Sprintf("recording_%s.h264", timestamp)
-	rm.filePath = filepath.Join(rm.recordingDir, filename)
-
-	file, err := os.Create(rm.filePath)
-	if err != nil {
-		return nil, fmt.Errorf("failed to create file: %w", err)
+	// Verify we have SPS/PPS cached
+	if rm.lastSPS == nil || rm.lastPPS == nil {
+		return nil, fmt.Errorf("cannot start recording: SPS/PPS not yet available (wait for camera stream to initialize)")
 	}
 
-	rm.file = file
-	rm.writer = bufio.NewWriterSize(file, writeBufferSize)
+	// Generate filename with timestamp: recording_20260131_143052.mp4
+	timestamp := time.Now().Format("20060102_150405")
+	filename := fmt.Sprintf("recording_%s.mp4", timestamp)
+	rm.filePath = filepath.Join(rm.recordingDir, filename)
+
+	// Start ffmpeg to mux H.264 to MP4
+	// -f h264: input format is raw H.264
+	// -i pipe:0: read from stdin
+	// -c copy: copy video stream without re-encoding
+	// -movflags +faststart: optimize for web playback
+	// -y: overwrite output file if exists
+	rm.ffmpegCmd = exec.Command("ffmpeg",
+		"-f", "h264",
+		"-i", "pipe:0",
+		"-c:v", "copy",
+		"-movflags", "+faststart",
+		"-y",
+		rm.filePath,
+	)
+
+	// Suppress ffmpeg's verbose output (only show errors)
+	rm.ffmpegCmd.Stderr = os.Stderr
+
+	// Get stdin pipe to write H.264 data
+	stdin, err := rm.ffmpegCmd.StdinPipe()
+	if err != nil {
+		return nil, fmt.Errorf("failed to create ffmpeg stdin pipe: %w", err)
+	}
+	rm.ffmpegStdin = stdin
+
+	// Start ffmpeg process
+	if err := rm.ffmpegCmd.Start(); err != nil {
+		return nil, fmt.Errorf("failed to start ffmpeg: %w", err)
+	}
+
+	rm.writer = bufio.NewWriterSize(stdin, writeBufferSize)
 	rm.startTime = time.Now()
 	rm.bytesWritten = 0
 	rm.framesWritten = 0
 
 	// Write cached SPS/PPS first (required for decodable stream)
-	if rm.lastSPS != nil {
-		n, _ := rm.writer.Write(rm.lastSPS)
-		rm.bytesWritten += int64(n)
-	}
-	if rm.lastPPS != nil {
-		n, _ := rm.writer.Write(rm.lastPPS)
-		rm.bytesWritten += int64(n)
-	}
+	n, _ := rm.writer.Write(rm.lastSPS)
+	rm.bytesWritten += int64(n)
+	n, _ = rm.writer.Write(rm.lastPPS)
+	rm.bytesWritten += int64(n)
 
+	// Set flag to wait for next IDR frame before writing any more data
+	rm.waitingForIDR = true
 	rm.recording.Store(true)
 
+	log.Printf("Recording started (MP4), waiting for keyframe...")
 	return rm.getStatusLocked(), nil
 }
 
-// Stop ends the current recording
+// Stop ends the current recording and finalizes the MP4 file
 func (rm *RecorderManager) Stop() (*RecordingStatus, error) {
 	rm.mu.Lock()
 	defer rm.mu.Unlock()
@@ -121,27 +154,37 @@ func (rm *RecorderManager) Stop() (*RecordingStatus, error) {
 
 	status := rm.getStatusLocked()
 
-	if rm.file != nil {
-		// Flush buffered data and sync to disk
-		if rm.writer != nil {
-			rm.writer.Flush()
-			rm.writer = nil
-		}
-		rm.file.Sync()
-		rm.file.Close()
-
-		// Write metadata file
-		meta := RecordingMeta{
-			DurationMs: status.DurationMs,
-			SizeBytes:  status.BytesWritten,
-		}
-		metaPath := rm.filePath + ".meta"
-		if metaData, err := json.Marshal(meta); err == nil {
-			os.WriteFile(metaPath, metaData, 0644)
-		}
-
-		rm.file = nil
+	// Flush buffered data to ffmpeg
+	if rm.writer != nil {
+		rm.writer.Flush()
+		rm.writer = nil
 	}
+
+	// Close stdin pipe to signal end of stream to ffmpeg
+	if rm.ffmpegStdin != nil {
+		rm.ffmpegStdin.Close()
+		rm.ffmpegStdin = nil
+	}
+
+	// Wait for ffmpeg to finish muxing the MP4
+	if rm.ffmpegCmd != nil {
+		if err := rm.ffmpegCmd.Wait(); err != nil {
+			log.Printf("ffmpeg exited with error: %v", err)
+		}
+		rm.ffmpegCmd = nil
+	}
+
+	// Write metadata file
+	meta := RecordingMeta{
+		DurationMs: status.DurationMs,
+		SizeBytes:  status.BytesWritten,
+	}
+	metaPath := rm.filePath + ".meta"
+	if metaData, err := json.Marshal(meta); err == nil {
+		os.WriteFile(metaPath, metaData, 0644)
+	}
+
+	log.Printf("Recording stopped and MP4 finalized: %s", filepath.Base(rm.filePath))
 
 	return status, nil
 }
@@ -196,34 +239,55 @@ func (rm *RecorderManager) ProcessNALUs() {
 }
 
 func (rm *RecorderManager) handleNALU(nalu []byte) {
-	// Cache SPS/PPS for starting new recordings
-	if len(nalu) >= 5 {
-		naluType := nalu[4] & 0x1F
-		switch naluType {
-		case 7: // SPS
-			rm.mu.Lock()
-			rm.lastSPS = make([]byte, len(nalu))
-			copy(rm.lastSPS, nalu)
-			rm.mu.Unlock()
-		case 8: // PPS
-			rm.mu.Lock()
-			rm.lastPPS = make([]byte, len(nalu))
-			copy(rm.lastPPS, nalu)
-			rm.mu.Unlock()
+	if len(nalu) < 5 {
+		return // Invalid NALU
+	}
+
+	naluType := nalu[4] & 0x1F
+
+	// Always cache SPS/PPS for starting future recordings
+	if naluType == 7 { // SPS
+		rm.mu.Lock()
+		rm.lastSPS = make([]byte, len(nalu))
+		copy(rm.lastSPS, nalu)
+		rm.mu.Unlock()
+	} else if naluType == 8 { // PPS
+		rm.mu.Lock()
+		rm.lastPPS = make([]byte, len(nalu))
+		copy(rm.lastPPS, nalu)
+		rm.mu.Unlock()
+	}
+
+	// If not recording, we're done (just cached SPS/PPS above if needed)
+	if !rm.recording.Load() {
+		return
+	}
+
+	rm.mu.Lock()
+	defer rm.mu.Unlock()
+
+	if rm.writer == nil {
+		return
+	}
+
+	// If waiting for IDR frame, only start writing when we get one
+	if rm.waitingForIDR {
+		if naluType == 5 { // IDR frame
+			rm.waitingForIDR = false
+			log.Printf("Keyframe received, recording video stream...")
+			// Write this IDR frame (fall through to write below)
+		} else {
+			// Skip non-IDR frames until we get a keyframe
+			// This includes any SPS/PPS before the first IDR (we already wrote cached ones)
+			return
 		}
 	}
 
-	// Write to file if recording
-	if rm.recording.Load() {
-		rm.mu.Lock()
-		if rm.writer != nil {
-			n, err := rm.writer.Write(nalu)
-			if err == nil {
-				rm.bytesWritten += int64(n)
-				rm.framesWritten++
-			}
-		}
-		rm.mu.Unlock()
+	// Write the NALU to file
+	n, err := rm.writer.Write(nalu)
+	if err == nil {
+		rm.bytesWritten += int64(n)
+		rm.framesWritten++
 	}
 }
 
@@ -241,8 +305,8 @@ func (rm *RecorderManager) ListRecordings() ([]RecordingFile, error) {
 		}
 
 		name := entry.Name()
-		// Only include .h264 files
-		if filepath.Ext(name) != ".h264" {
+		// Only include .mp4 files
+		if filepath.Ext(name) != ".mp4" {
 			continue
 		}
 
@@ -276,7 +340,7 @@ func (rm *RecorderManager) ListRecordings() ([]RecordingFile, error) {
 func (rm *RecorderManager) GetFilePath(filename string) (string, error) {
 	// Sanitize filename to prevent directory traversal
 	filename = filepath.Base(filename)
-	if filepath.Ext(filename) != ".h264" {
+	if filepath.Ext(filename) != ".mp4" {
 		return "", fmt.Errorf("invalid file type")
 	}
 
@@ -296,14 +360,27 @@ func (rm *RecorderManager) Shutdown() {
 	rm.wg.Wait()
 
 	rm.mu.Lock()
-	if rm.file != nil {
+	// If recording is in progress, stop it
+	if rm.recording.Load() {
+		rm.recording.Store(false)
+
+		// Flush buffered data to ffmpeg
 		if rm.writer != nil {
 			rm.writer.Flush()
 			rm.writer = nil
 		}
-		rm.file.Sync()
-		rm.file.Close()
-		rm.file = nil
+
+		// Close stdin pipe to signal end of stream
+		if rm.ffmpegStdin != nil {
+			rm.ffmpegStdin.Close()
+			rm.ffmpegStdin = nil
+		}
+
+		// Wait for ffmpeg to finish
+		if rm.ffmpegCmd != nil {
+			rm.ffmpegCmd.Wait()
+			rm.ffmpegCmd = nil
+		}
 	}
 	rm.mu.Unlock()
 

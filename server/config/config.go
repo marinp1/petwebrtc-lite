@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"log"
 	"os"
+	"os/exec"
 	"strconv"
 	"strings"
 )
@@ -87,6 +88,15 @@ func ParseConfig(path string) *ServerConfig {
 	return conf
 }
 
+// checkFFmpegAvailable checks if ffmpeg is available in PATH
+func checkFFmpegAvailable() error {
+	cmd := exec.Command("ffmpeg", "-version")
+	if err := cmd.Run(); err != nil {
+		return fmt.Errorf("ffmpeg not found in PATH (required for MP4 recording)")
+	}
+	return nil
+}
+
 // Validate checks configuration values and applies corrections or warnings
 func (c *ServerConfig) Validate() {
 	// Validate port range
@@ -144,7 +154,15 @@ func (c *ServerConfig) Validate() {
 			} else {
 				f.Close()
 				os.Remove(testFile)
-				log.Printf("Recording enabled: %s", c.RecordingDir)
+
+				// Check if ffmpeg is available (required for MP4 muxing)
+				if err := checkFFmpegAvailable(); err != nil {
+					log.Printf("WARNING: ffmpeg not available: %v", err)
+					c.RecordingUnavailableReason = fmt.Sprintf("ffmpeg not available: %v", err)
+					c.RecordingDir = "" // Disable recording
+				} else {
+					log.Printf("Recording enabled: %s (using ffmpeg for MP4 muxing)", c.RecordingDir)
+				}
 			}
 		}
 	} else {
