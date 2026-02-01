@@ -4,7 +4,6 @@ import (
 	"bufio"
 	"encoding/json"
 	"fmt"
-	"io"
 	"log"
 	"os"
 	"os/exec"
@@ -16,14 +15,14 @@ import (
 
 const writeBufferSize = 64 * 1024 // 64KB buffer to batch writes and reduce syscalls
 
-// RecorderManager handles H264 recording to MP4 file via ffmpeg
+// RecorderManager handles H264 recording (writes .h264, converts to MP4 afterward)
 type RecorderManager struct {
 	mu            sync.RWMutex
 	recording     atomic.Bool
-	ffmpegCmd     *exec.Cmd
-	ffmpegStdin   io.WriteCloser
+	file          *os.File
 	writer        *bufio.Writer // Buffered writer to reduce syscalls
-	filePath      string
+	h264Path      string        // Path to raw .h264 file during recording
+	filePath      string        // Path to final .mp4 file
 	startTime     time.Time
 	bytesWritten  int64
 	framesWritten int64
@@ -73,7 +72,7 @@ func NewRecorderManager(recordingDir string) *RecorderManager {
 	}
 }
 
-// Start begins recording to a new MP4 file via ffmpeg
+// Start begins recording to a new .h264 file (converts to MP4 on stop)
 func (rm *RecorderManager) Start() (*RecordingStatus, error) {
 	rm.mu.Lock()
 	defer rm.mu.Unlock()
@@ -87,42 +86,20 @@ func (rm *RecorderManager) Start() (*RecordingStatus, error) {
 		return nil, fmt.Errorf("cannot start recording: SPS/PPS not yet available (wait for camera stream to initialize)")
 	}
 
-	// Generate filename with timestamp: recording_20260131_143052.mp4
+	// Generate filenames with timestamp
 	timestamp := time.Now().Format("20060102_150405")
-	filename := fmt.Sprintf("recording_%s.mp4", timestamp)
-	rm.filePath = filepath.Join(rm.recordingDir, filename)
+	h264Filename := fmt.Sprintf("recording_%s.h264", timestamp)
+	rm.h264Path = filepath.Join(rm.recordingDir, h264Filename)
+	rm.filePath = filepath.Join(rm.recordingDir, fmt.Sprintf("recording_%s.mp4", timestamp))
 
-	// Start ffmpeg to mux H.264 to MP4
-	// -f h264: input format is raw H.264
-	// -i pipe:0: read from stdin
-	// -c copy: copy video stream without re-encoding
-	// -movflags +faststart: optimize for web playback
-	// -y: overwrite output file if exists
-	rm.ffmpegCmd = exec.Command("ffmpeg",
-		"-f", "h264",
-		"-i", "pipe:0",
-		"-c:v", "copy",
-		"-movflags", "+faststart",
-		"-y",
-		rm.filePath,
-	)
-
-	// Suppress ffmpeg's verbose output (only show errors)
-	rm.ffmpegCmd.Stderr = os.Stderr
-
-	// Get stdin pipe to write H.264 data
-	stdin, err := rm.ffmpegCmd.StdinPipe()
+	// Create .h264 file for raw recording
+	file, err := os.Create(rm.h264Path)
 	if err != nil {
-		return nil, fmt.Errorf("failed to create ffmpeg stdin pipe: %w", err)
-	}
-	rm.ffmpegStdin = stdin
-
-	// Start ffmpeg process
-	if err := rm.ffmpegCmd.Start(); err != nil {
-		return nil, fmt.Errorf("failed to start ffmpeg: %w", err)
+		return nil, fmt.Errorf("failed to create file: %w", err)
 	}
 
-	rm.writer = bufio.NewWriterSize(stdin, writeBufferSize)
+	rm.file = file
+	rm.writer = bufio.NewWriterSize(file, writeBufferSize)
 	rm.startTime = time.Now()
 	rm.bytesWritten = 0
 	rm.framesWritten = 0
@@ -137,11 +114,11 @@ func (rm *RecorderManager) Start() (*RecordingStatus, error) {
 	rm.waitingForIDR = true
 	rm.recording.Store(true)
 
-	log.Printf("Recording started (MP4), waiting for keyframe...")
+	log.Printf("Recording started (.h264), waiting for keyframe...")
 	return rm.getStatusLocked(), nil
 }
 
-// Stop ends the current recording and finalizes the MP4 file
+// Stop ends the current recording, converts .h264 to MP4, and cleans up
 func (rm *RecorderManager) Stop() (*RecordingStatus, error) {
 	rm.mu.Lock()
 	defer rm.mu.Unlock()
@@ -154,39 +131,61 @@ func (rm *RecorderManager) Stop() (*RecordingStatus, error) {
 
 	status := rm.getStatusLocked()
 
-	// Flush buffered data to ffmpeg
+	// Flush and close .h264 file
 	if rm.writer != nil {
 		rm.writer.Flush()
 		rm.writer = nil
 	}
-
-	// Close stdin pipe to signal end of stream to ffmpeg
-	if rm.ffmpegStdin != nil {
-		rm.ffmpegStdin.Close()
-		rm.ffmpegStdin = nil
+	if rm.file != nil {
+		rm.file.Sync()
+		rm.file.Close()
+		rm.file = nil
 	}
 
-	// Wait for ffmpeg to finish muxing the MP4
-	if rm.ffmpegCmd != nil {
-		if err := rm.ffmpegCmd.Wait(); err != nil {
-			log.Printf("ffmpeg exited with error: %v", err)
+	log.Printf("Recording stopped: %s (%d bytes, %dms)", filepath.Base(rm.h264Path), status.BytesWritten, status.DurationMs)
+
+	// Convert .h264 to MP4 using ffmpeg
+	log.Printf("Converting to MP4...")
+	if err := rm.convertToMP4(); err != nil {
+		log.Printf("Warning: MP4 conversion failed: %v (raw .h264 preserved)", err)
+		// Keep the .h264 file if conversion fails
+	} else {
+		// Conversion successful, delete the .h264 file
+		os.Remove(rm.h264Path)
+		log.Printf("MP4 finalized: %s", filepath.Base(rm.filePath))
+
+		// Write metadata file
+		meta := RecordingMeta{
+			DurationMs: status.DurationMs,
+			SizeBytes:  status.BytesWritten,
 		}
-		rm.ffmpegCmd = nil
+		metaPath := rm.filePath + ".meta"
+		if metaData, err := json.Marshal(meta); err == nil {
+			os.WriteFile(metaPath, metaData, 0644)
+		}
 	}
-
-	// Write metadata file
-	meta := RecordingMeta{
-		DurationMs: status.DurationMs,
-		SizeBytes:  status.BytesWritten,
-	}
-	metaPath := rm.filePath + ".meta"
-	if metaData, err := json.Marshal(meta); err == nil {
-		os.WriteFile(metaPath, metaData, 0644)
-	}
-
-	log.Printf("Recording stopped and MP4 finalized: %s", filepath.Base(rm.filePath))
 
 	return status, nil
+}
+
+// convertToMP4 converts the raw .h264 file to MP4 using ffmpeg
+func (rm *RecorderManager) convertToMP4() error {
+	cmd := exec.Command("ffmpeg",
+		"-f", "h264",
+		"-i", rm.h264Path,
+		"-c:v", "copy",
+		"-movflags", "+faststart",
+		"-y",
+		rm.filePath,
+	)
+
+	// Capture output for debugging
+	output, err := cmd.CombinedOutput()
+	if err != nil {
+		return fmt.Errorf("ffmpeg conversion failed: %w (output: %s)", err, string(output))
+	}
+
+	return nil
 }
 
 // GetStatus returns current recording status
@@ -360,27 +359,20 @@ func (rm *RecorderManager) Shutdown() {
 	rm.wg.Wait()
 
 	rm.mu.Lock()
-	// If recording is in progress, stop it
+	// If recording is in progress, flush and close the file
 	if rm.recording.Load() {
 		rm.recording.Store(false)
 
-		// Flush buffered data to ffmpeg
 		if rm.writer != nil {
 			rm.writer.Flush()
 			rm.writer = nil
 		}
-
-		// Close stdin pipe to signal end of stream
-		if rm.ffmpegStdin != nil {
-			rm.ffmpegStdin.Close()
-			rm.ffmpegStdin = nil
+		if rm.file != nil {
+			rm.file.Sync()
+			rm.file.Close()
+			rm.file = nil
 		}
-
-		// Wait for ffmpeg to finish
-		if rm.ffmpegCmd != nil {
-			rm.ffmpegCmd.Wait()
-			rm.ffmpegCmd = nil
-		}
+		log.Printf("Recording aborted during shutdown: %s", rm.h264Path)
 	}
 	rm.mu.Unlock()
 
