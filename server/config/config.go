@@ -48,6 +48,10 @@ func ParseConfig(path string) *ServerConfig {
 			}
 			key := strings.TrimSpace(parts[0])
 			val := strings.TrimSpace(parts[1])
+			// Strip surrounding quotes if present
+			if len(val) >= 2 && (val[0] == '"' && val[len(val)-1] == '"' || val[0] == '\'' && val[len(val)-1] == '\'') {
+				val = val[1 : len(val)-1]
+			}
 			switch key {
 			case "addr":
 				if v, err := strconv.Atoi(val); err == nil {
