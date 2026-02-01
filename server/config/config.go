@@ -10,13 +10,14 @@ import (
 )
 
 type ServerConfig struct {
-	Addr         int
-	Width        int
-	Height       int
-	Framerate    int
-	Rotation     int
-	CorsOrigin   string
-	RecordingDir string // Optional: directory for recording files (must exist and be writable)
+	Addr                      int
+	Width                     int
+	Height                    int
+	Framerate                 int
+	Rotation                  int
+	CorsOrigin                string
+	RecordingDir              string // Optional: directory for recording files (must exist and be writable)
+	RecordingUnavailableReason string // Reason why recording is unavailable (if RecordingDir is empty)
 }
 
 // ParseConfig loads configuration from the given file path (TOML-like, key=value per line).
@@ -123,15 +124,18 @@ func (c *ServerConfig) Validate() {
 		info, err := os.Stat(c.RecordingDir)
 		if err != nil {
 			log.Printf("WARNING: Recording directory %q does not exist or is not accessible: %v", c.RecordingDir, err)
+			c.RecordingUnavailableReason = fmt.Sprintf("Directory does not exist or is not accessible: %v", err)
 			c.RecordingDir = "" // Disable recording
 		} else if !info.IsDir() {
 			log.Printf("WARNING: Recording path %q is not a directory", c.RecordingDir)
+			c.RecordingUnavailableReason = "Path is not a directory"
 			c.RecordingDir = "" // Disable recording
 		} else {
 			// Test if writable by creating a temp file
 			testFile := c.RecordingDir + "/.write_test"
 			if f, err := os.Create(testFile); err != nil {
 				log.Printf("WARNING: Recording directory %q is not writable: %v", c.RecordingDir, err)
+				c.RecordingUnavailableReason = fmt.Sprintf("Directory is not writable: %v", err)
 				c.RecordingDir = "" // Disable recording
 			} else {
 				f.Close()
@@ -139,6 +143,9 @@ func (c *ServerConfig) Validate() {
 				log.Printf("Recording enabled: %s", c.RecordingDir)
 			}
 		}
+	} else {
+		// No recording directory configured
+		c.RecordingUnavailableReason = "No recording_dir configured"
 	}
 }
 

@@ -11,7 +11,7 @@ import (
 )
 
 // HandleRecordStatus handles GET /record/status
-func HandleRecordStatus(w http.ResponseWriter, r *http.Request, recorder *RecorderManager) {
+func HandleRecordStatus(w http.ResponseWriter, r *http.Request, recorder *RecorderManager, unavailableReason string) {
 	if r.Method != http.MethodGet {
 		http.Error(w, "method not allowed", http.StatusMethodNotAllowed)
 		return
@@ -22,8 +22,9 @@ func HandleRecordStatus(w http.ResponseWriter, r *http.Request, recorder *Record
 		status = recorder.GetStatus()
 	} else {
 		status = &RecordingStatus{
-			Available: false,
-			Recording: false,
+			Available:         false,
+			Recording:         false,
+			UnavailableReason: unavailableReason,
 		}
 	}
 

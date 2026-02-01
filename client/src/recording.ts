@@ -2,6 +2,7 @@
 export interface RecordingStatus {
   available: boolean;
   recording: boolean;
+  unavailableReason?: string; // Reason why recording is unavailable (if available is false)
   filePath?: string;
   startTime?: number;
   durationMs?: number;

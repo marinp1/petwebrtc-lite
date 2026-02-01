@@ -35,13 +35,14 @@ type RecorderManager struct {
 
 // RecordingStatus represents the current recording state
 type RecordingStatus struct {
-	Available     bool   `json:"available"`
-	Recording     bool   `json:"recording"`
-	FilePath      string `json:"filePath,omitempty"`
-	StartTime     int64  `json:"startTime,omitempty"`
-	DurationMs    int64  `json:"durationMs,omitempty"`
-	BytesWritten  int64  `json:"bytesWritten,omitempty"`
-	FramesWritten int64  `json:"framesWritten,omitempty"`
+	Available         bool   `json:"available"`
+	Recording         bool   `json:"recording"`
+	UnavailableReason string `json:"unavailableReason,omitempty"` // Reason why recording is unavailable
+	FilePath          string `json:"filePath,omitempty"`
+	StartTime         int64  `json:"startTime,omitempty"`
+	DurationMs        int64  `json:"durationMs,omitempty"`
+	BytesWritten      int64  `json:"bytesWritten,omitempty"`
+	FramesWritten     int64  `json:"framesWritten,omitempty"`
 }
 
 // RecordingFile represents a recording file for listing

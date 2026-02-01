@@ -87,7 +87,7 @@ func main() {
 
 	// Recording endpoints (status is always available, others only if recorder is configured)
 	http.Handle("/record/status", enableCORS(conf.CorsOrigin, http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		internal.HandleRecordStatus(w, r, recorder)
+		internal.HandleRecordStatus(w, r, recorder, conf.RecordingUnavailableReason)
 	})))
 
 	if recorder != nil {
