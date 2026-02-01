@@ -19,6 +19,7 @@ const writeBufferSize = 64 * 1024 // 64KB buffer to batch writes and reduce sysc
 type RecorderManager struct {
 	mu            sync.RWMutex
 	recording     atomic.Bool
+	finalizing    atomic.Bool // Set during MP4 conversion
 	file          *os.File
 	writer        *bufio.Writer // Buffered writer to reduce syscalls
 	h264Path      string        // Path to raw .h264 file during recording
@@ -41,6 +42,7 @@ type RecorderManager struct {
 type RecordingStatus struct {
 	Available         bool   `json:"available"`
 	Recording         bool   `json:"recording"`
+	Finalizing        bool   `json:"finalizing"`        // True during MP4 conversion
 	UnavailableReason string `json:"unavailableReason,omitempty"` // Reason why recording is unavailable
 	FilePath          string `json:"filePath,omitempty"`
 	StartTime         int64  `json:"startTime,omitempty"`
@@ -119,12 +121,17 @@ func (rm *RecorderManager) Start() (*RecordingStatus, error) {
 }
 
 // Stop ends the current recording, converts .h264 to MP4, and cleans up
+// Mutex is held during entire operation including MP4 conversion to prevent parallel recordings
 func (rm *RecorderManager) Stop() (*RecordingStatus, error) {
 	rm.mu.Lock()
 	defer rm.mu.Unlock()
 
 	if !rm.recording.Load() {
 		return nil, fmt.Errorf("no recording in progress")
+	}
+
+	if rm.finalizing.Load() {
+		return nil, fmt.Errorf("recording is already finalizing")
 	}
 
 	rm.recording.Store(false)
@@ -144,7 +151,11 @@ func (rm *RecorderManager) Stop() (*RecordingStatus, error) {
 
 	log.Printf("Recording stopped: %s (%d bytes, %dms)", filepath.Base(rm.h264Path), status.BytesWritten, status.DurationMs)
 
-	// Convert .h264 to MP4 using ffmpeg
+	// Set finalizing state (mutex still held, prevents new recordings)
+	rm.finalizing.Store(true)
+	defer rm.finalizing.Store(false)
+
+	// Convert .h264 to MP4 using ffmpeg (blocks while mutex is held)
 	log.Printf("Converting to MP4...")
 	if err := rm.convertToMP4(); err != nil {
 		log.Printf("Warning: MP4 conversion failed: %v (raw .h264 preserved)", err)
@@ -197,8 +208,9 @@ func (rm *RecorderManager) GetStatus() *RecordingStatus {
 
 func (rm *RecorderManager) getStatusLocked() *RecordingStatus {
 	status := &RecordingStatus{
-		Available: true,
-		Recording: rm.recording.Load(),
+		Available:  true,
+		Recording:  rm.recording.Load(),
+		Finalizing: rm.finalizing.Load(),
 	}
 
 	if status.Recording {

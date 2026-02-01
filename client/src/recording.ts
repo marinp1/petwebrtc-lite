@@ -2,6 +2,7 @@
 export interface RecordingStatus {
   available: boolean;
   recording: boolean;
+  finalizing: boolean; // True during MP4 conversion after recording stops
   unavailableReason?: string; // Reason why recording is unavailable (if available is false)
   filePath?: string;
   startTime?: number;
@@ -128,10 +129,10 @@ export function formatDate(timestamp: number): string {
   return `${month} ${day}, ${hours}:${minutes}`;
 }
 
-// Parse recording filename to extract date (recording_20260131_143052.h264)
+// Parse recording filename to extract date (recording_20260131_143052.mp4)
 export function parseRecordingDate(filename: string): Date | null {
   const match = filename.match(
-    /recording_(\d{4})(\d{2})(\d{2})_(\d{2})(\d{2})(\d{2})\.h264/,
+    /recording_(\d{4})(\d{2})(\d{2})_(\d{2})(\d{2})(\d{2})\.mp4/,
   );
   if (!match) return null;
 

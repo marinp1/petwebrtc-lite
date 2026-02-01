@@ -143,13 +143,21 @@ carousel.initialize().catch((err) => {
 let statusPollingId: number | null = null;
 let recordingsPanel: RecordingsPanel | null = null;
 
-function updateRecordButton(recording: boolean): void {
+function updateRecordButton(
+  recording: boolean,
+  finalizing: boolean = false,
+): void {
   if (!recordButton) return;
-  recordButton.ariaPressed = String(recording);
+  recordButton.ariaPressed = String(recording || finalizing);
   recordButton.classList.toggle("recording", recording);
+  recordButton.disabled = finalizing; // Disable button during finalization
   const label = recordButton.querySelector(".record-label");
-  if (label && !recording) {
-    label.textContent = "Record";
+  if (label) {
+    if (finalizing) {
+      label.textContent = "Finalizing MP4...";
+    } else if (!recording) {
+      label.textContent = "Record";
+    }
   }
 }
 
@@ -160,7 +168,7 @@ function startStatusPolling(): void {
     try {
       const currentCameraIndex = carousel.getCurrentIndex();
       const status = await getRecordingStatus(currentCameraIndex);
-      updateRecordButton(status.recording);
+      updateRecordButton(status.recording, status.finalizing);
 
       // Update duration display while recording
       if (status.recording && status.durationMs !== undefined) {
@@ -170,7 +178,8 @@ function startStatusPolling(): void {
         }
       }
 
-      if (!status.recording) {
+      // Stop polling when recording and finalization are both complete
+      if (!status.recording && !status.finalizing) {
         stopStatusPolling();
       }
     } catch (err) {
@@ -196,6 +205,7 @@ async function initRecording(): Promise<void> {
         getRecordingStatus(i).catch(() => ({
           available: false,
           recording: false,
+          finalizing: false,
         })),
       );
     }
@@ -220,14 +230,15 @@ async function initRecording(): Promise<void> {
       const status = await getRecordingStatus(currentCameraIndex).catch(() => ({
         available: false,
         recording: false,
+        finalizing: false,
       }));
 
       // Hide/show button based on current camera's support
       recordButton.style.display = status.available ? "" : "none";
 
       if (status.available) {
-        updateRecordButton(status.recording);
-        if (status.recording) {
+        updateRecordButton(status.recording, status.finalizing);
+        if (status.recording || status.finalizing) {
           startStatusPolling();
         }
       } else {
@@ -249,8 +260,8 @@ async function initRecording(): Promise<void> {
 
         if (currentStatus.recording) {
           await stopRecording(currentCameraIndex);
-          updateRecordButton(false);
-          stopStatusPolling();
+          // Don't update button yet - wait for status polling to show finalization
+          startStatusPolling(); // Continue polling to show "Finalizing MP4..."
         } else {
           await startRecording(currentCameraIndex);
           updateRecordButton(true);
