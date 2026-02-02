@@ -67,6 +67,10 @@ func main() {
 		"rpicam-vid -t 0 --width %d --height %d --framerate %d --inline --rotation %d --codec h264 --nopreview -o -",
 		conf.Width, conf.Height, conf.Framerate, conf.Rotation,
 	)
+	// Add bitrate limiting if configured (critical for Pi Zero 2 performance)
+	if conf.Bitrate > 0 {
+		cameraCmd += fmt.Sprintf(" --bitrate %d", conf.Bitrate)
+	}
 
 	if err := cameraManager.StartCamera(cameraCmd); err != nil {
 		log.Fatalf("Failed to start camera: %v", err)

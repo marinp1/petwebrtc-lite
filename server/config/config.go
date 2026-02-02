@@ -16,6 +16,7 @@ type ServerConfig struct {
 	Height                    int
 	Framerate                 int
 	Rotation                  int
+	Bitrate                   int    // Optional: H264 bitrate in bits/sec (e.g., 1000000 = 1Mbps). If 0, rpicam-vid chooses automatically.
 	CorsOrigin                string
 	RecordingDir              string // Optional: directory for recording files (must exist and be writable)
 	RecordingUnavailableReason string // Reason why recording is unavailable (if RecordingDir is empty)
@@ -73,6 +74,10 @@ func ParseConfig(path string) *ServerConfig {
 			case "rotation":
 				if v, err := strconv.Atoi(val); err == nil {
 					conf.Rotation = v
+				}
+			case "bitrate":
+				if v, err := strconv.Atoi(val); err == nil {
+					conf.Bitrate = v
 				}
 			case "cors_origin":
 				conf.CorsOrigin = val
@@ -177,6 +182,10 @@ func (c *ServerConfig) String() string {
 	if c.RecordingDir != "" {
 		recording = c.RecordingDir
 	}
-	return fmt.Sprintf("Port=%d, Resolution=%dx%d@%dfps, Rotation=%d°, CORS=%s, Recording=%s",
-		c.Addr, c.Width, c.Height, c.Framerate, c.Rotation, c.CorsOrigin, recording)
+	bitrate := "auto"
+	if c.Bitrate > 0 {
+		bitrate = fmt.Sprintf("%dkbps", c.Bitrate/1000)
+	}
+	return fmt.Sprintf("Port=%d, Resolution=%dx%d@%dfps, Rotation=%d°, Bitrate=%s, CORS=%s, Recording=%s",
+		c.Addr, c.Width, c.Height, c.Framerate, c.Rotation, bitrate, c.CorsOrigin, recording)
 }
