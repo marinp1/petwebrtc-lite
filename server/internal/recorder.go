@@ -17,13 +17,15 @@ const writeBufferSize = 64 * 1024 // 64KB buffer to batch writes and reduce sysc
 
 // RecorderManager handles H264 recording (writes .h264, converts to MP4 afterward)
 type RecorderManager struct {
-	mu            sync.RWMutex
-	recording     atomic.Bool
-	finalizing    atomic.Bool // Set during MP4 conversion
-	file          *os.File
-	writer        *bufio.Writer // Buffered writer to reduce syscalls
-	h264Path      string        // Path to raw .h264 file during recording
-	filePath      string        // Path to final .mp4 file
+	mu             sync.RWMutex
+	recording      atomic.Bool
+	finalizing     atomic.Bool // Set during MP4 conversion
+	file           *os.File
+	writer         *bufio.Writer // Buffered writer to reduce syscalls
+	h264Path       string        // Path to raw .h264 file during recording
+	filePath       string        // Path to final .mp4 file
+	skipConversion bool
+
 	startTime     time.Time
 	bytesWritten  int64
 	framesWritten int64
@@ -33,16 +35,16 @@ type RecorderManager struct {
 	wg            sync.WaitGroup
 
 	// Cached keyframes for starting recordings
-	lastSPS        []byte
-	lastPPS        []byte
-	waitingForIDR  bool // Flag to wait for keyframe before writing
+	lastSPS       []byte
+	lastPPS       []byte
+	waitingForIDR bool // Flag to wait for keyframe before writing
 }
 
 // RecordingStatus represents the current recording state
 type RecordingStatus struct {
 	Available         bool   `json:"available"`
 	Recording         bool   `json:"recording"`
-	Finalizing        bool   `json:"finalizing"`        // True during MP4 conversion
+	Finalizing        bool   `json:"finalizing"`                  // True during MP4 conversion
 	UnavailableReason string `json:"unavailableReason,omitempty"` // Reason why recording is unavailable
 	FilePath          string `json:"filePath,omitempty"`
 	StartTime         int64  `json:"startTime,omitempty"`
@@ -66,11 +68,12 @@ type RecordingMeta struct {
 }
 
 // NewRecorderManager creates a new recorder instance
-func NewRecorderManager(recordingDir string) *RecorderManager {
+func NewRecorderManager(recordingDir string, skipConversion bool) *RecorderManager {
 	return &RecorderManager{
-		recordingDir: recordingDir,
-		naluChan:     make(chan []byte, 500), // Buffer for burst tolerance
-		done:         make(chan struct{}),
+		recordingDir:   recordingDir,
+		skipConversion: skipConversion,
+		naluChan:       make(chan []byte, 500), // Buffer for burst tolerance
+		done:           make(chan struct{}),
 	}
 }
 
@@ -154,6 +157,12 @@ func (rm *RecorderManager) Stop() (*RecordingStatus, error) {
 	// Set finalizing state (mutex still held, prevents new recordings)
 	rm.finalizing.Store(true)
 	defer rm.finalizing.Store(false)
+
+	// If conversion is skipped, return here
+	if rm.skipConversion {
+		log.Printf("Skipping MP4 conversion...")
+		return status, nil
+	}
 
 	// Convert .h264 to MP4 using ffmpeg (blocks while mutex is held)
 	log.Printf("Converting to MP4...")

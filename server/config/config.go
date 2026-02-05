@@ -11,15 +11,16 @@ import (
 )
 
 type ServerConfig struct {
-	Addr                      int
-	Width                     int
-	Height                    int
-	Framerate                 int
-	Rotation                  int
-	Bitrate                   int    // Optional: H264 bitrate in bits/sec (e.g., 1000000 = 1Mbps). If 0, rpicam-vid chooses automatically.
-	CorsOrigin                string
-	RecordingDir              string // Optional: directory for recording files (must exist and be writable)
+	Addr                       int
+	Width                      int
+	Height                     int
+	Framerate                  int
+	Rotation                   int
+	Bitrate                    int // Optional: H264 bitrate in bits/sec (e.g., 1000000 = 1Mbps). If 0, rpicam-vid chooses automatically.
+	CorsOrigin                 string
+	RecordingDir               string // Optional: directory for recording files (must exist and be writable)
 	RecordingUnavailableReason string // Reason why recording is unavailable (if RecordingDir is empty)
+	RecordingSkipConversion    bool   // Optional, if ffmpeg finalisation should be ignored
 }
 
 // ParseConfig loads configuration from the given file path (TOML-like, key=value per line).
@@ -27,12 +28,13 @@ type ServerConfig struct {
 func ParseConfig(path string) *ServerConfig {
 	// Defaults
 	conf := &ServerConfig{
-		Addr:       8765,
-		Width:      1280,
-		Height:     720,
-		Framerate:  30,
-		Rotation:   180,
-		CorsOrigin: "*",
+		Addr:                    8765,
+		Width:                   1280,
+		Height:                  720,
+		Framerate:               30,
+		Rotation:                180,
+		CorsOrigin:              "*",
+		RecordingSkipConversion: false,
 	}
 
 	f, err := os.Open(path)
@@ -83,6 +85,8 @@ func ParseConfig(path string) *ServerConfig {
 				conf.CorsOrigin = val
 			case "recording_dir":
 				conf.RecordingDir = val
+			case "recording_skip_conversion":
+				conf.RecordingSkipConversion = val == "true"
 			}
 		}
 	}
@@ -94,7 +98,10 @@ func ParseConfig(path string) *ServerConfig {
 }
 
 // checkFFmpegAvailable checks if ffmpeg is available in PATH
-func checkFFmpegAvailable() error {
+func checkFFmpegAvailable(c *ServerConfig) error {
+	if c.RecordingSkipConversion == true {
+		return nil
+	}
 	cmd := exec.Command("ffmpeg", "-version")
 	if err := cmd.Run(); err != nil {
 		return fmt.Errorf("ffmpeg not found in PATH (required for MP4 recording)")
@@ -161,7 +168,7 @@ func (c *ServerConfig) Validate() {
 				os.Remove(testFile)
 
 				// Check if ffmpeg is available (required for MP4 muxing)
-				if err := checkFFmpegAvailable(); err != nil {
+				if err := checkFFmpegAvailable(c); err != nil {
 					log.Printf("WARNING: ffmpeg not available: %v", err)
 					c.RecordingUnavailableReason = fmt.Sprintf("ffmpeg not available: %v", err)
 					c.RecordingDir = "" // Disable recording
