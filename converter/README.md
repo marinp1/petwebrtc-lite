@@ -1,6 +1,8 @@
 # H264 to MP4 Converter Service
 
-Watches for `.h264` files and converts them to MP4 using ffmpeg.
+Watches for `.h264` recording files and converts them to MP4 using ffmpeg. Runs on your NAS server to offload conversion from camera devices.
+
+For full deployment instructions including NAS/NFS setup, see [docs/DEPLOYMENT.md](../docs/DEPLOYMENT.md).
 
 ## Prerequisites
 
