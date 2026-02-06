@@ -217,16 +217,15 @@ func (cm *ClientManager) AddClient(client *Client) {
 
 func (cm *ClientManager) RemoveClient(client *Client) {
 	cm.Mu.Lock()
+	if _, exists := cm.Clients[client]; !exists {
+		cm.Mu.Unlock()
+		return // Already removed
+	}
 	delete(cm.Clients, client)
 	cm.Mu.Unlock()
 
 	// Close done channel to stop goroutine
-	select {
-	case <-client.done:
-		// Already closed
-	default:
-		close(client.done)
-	}
+	close(client.done)
 
 	// Wait for sender goroutine to finish
 	client.wg.Wait()

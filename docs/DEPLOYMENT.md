@@ -271,6 +271,40 @@ Access at `http://<nas-ip>:8080/`
 
 ---
 
+## Debugging
+
+### Enable/Disable Logging
+
+By default, server logs are discarded. To view them:
+
+```bash
+# Live tail logs
+sudo journalctl -u petwebrtc -f
+
+# Recent logs (last 5 minutes)
+sudo journalctl -u petwebrtc --since "5 minutes ago"
+```
+
+To enable logs, create a service override:
+
+```bash
+sudo systemctl edit petwebrtc
+```
+
+Add:
+```ini
+[Service]
+StandardOutput=journal
+StandardError=journal
+```
+
+To remove logging, remove the override:
+
+```bash
+sudo systemctl revert petwebrtc
+sudo systemctl restart petwebrtc
+```
+
 ## Service Management
 
 ### PetWebRTC (Camera Pis)
@@ -280,7 +314,7 @@ sudo systemctl status petwebrtc
 sudo systemctl start petwebrtc
 sudo systemctl stop petwebrtc
 sudo systemctl restart petwebrtc
-journalctl -u petwebrtc -f
+sudo journalctl -u petwebrtc -f
 ```
 
 ### H264 Converter (NAS)
