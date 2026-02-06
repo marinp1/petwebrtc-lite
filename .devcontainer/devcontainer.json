@@ -1,37 +1,28 @@
-// For format details, see https://aka.ms/devcontainer.json. For config options, see the
-// README at: https://github.com/devcontainers/templates/tree/main/src/go
 {
-    "name": "Go",
-    // Or use a Dockerfile or Docker Compose file. More info: https://containers.dev/guide/dockerfile
-    "image": "mcr.microsoft.com/devcontainers/go:1.23",
-    // Features to add to the dev container. More info: https://containers.dev/features.
-    "features": {
-        "ghcr.io/devcontainers/features/node:1": {
-            "version": "lts"
+  "name": "Go",
+  "image": "mcr.microsoft.com/devcontainers/go:1.23",
+  "features": {
+    "ghcr.io/devcontainers/features/node:1": {
+      "version": "lts"
+    }
+  },
+  "customizations": {
+    "vscode": {
+      "settings": {
+        "chat.agent.enabled": false,
+        "chat.disableAIFeatures": true,
+        "biome.lsp.bin": "./client/node_modules/@biomejs/biome/bin/biome",
+        "[typescript]": {
+          "editor.formatOnSave": true,
+          "editor.defaultFormatter": "biomejs.biome"
+        },
+        "[css]": {
+          "editor.formatOnSave": true,
+          "editor.defaultFormatter": "biomejs.biome"
         }
-    },
-    // Configure tool-specific properties.
-    "customizations": {
-        // Configure properties specific to VS Code.
-        "vscode": {
-            "settings": {
-                "chat.agent.enabled": false,
-                "chat.disableAIFeatures": true,
-                "biome.lsp.bin": "./client/node_modules/@biomejs/biome/bin/biome",
-                "[typescript]": {
-                    "editor.formatOnSave": true,
-                    "editor.defaultFormatter": "biomejs.biome"
-                },
-                "[css]": {
-                    "editor.formatOnSave": true,
-                    "editor.defaultFormatter": "biomejs.biome"
-                }
-            },
-            "extensions": [
-                "golang.go",
-                "biomejs.biome"
-            ]
-        }
-    },
-    "postStartCommand": "./install.sh"
+      },
+      "extensions": ["golang.go", "biomejs.biome"]
+    }
+  },
+  "postStartCommand": "./install.sh"
 }
