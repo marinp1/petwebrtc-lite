@@ -16,8 +16,9 @@ import { getStorage, setStorage } from "./storage";
 const cameraCount = await getCameraCount();
 console.log("Found", cameraCount, "cameras");
 
-const container = document.querySelector<HTMLDivElement>(".container")!;
-const navContainer = document.querySelector<HTMLDivElement>(".carousel-nav")!;
+const cameraView = document.getElementById("camera-view")!;
+const container = cameraView.querySelector<HTMLDivElement>(".container")!;
+const navContainer = cameraView.querySelector<HTMLDivElement>(".carousel-nav")!;
 const recognisitionButton = document.getElementById("recognisition-button")!;
 const recordButton = document.getElementById(
   "record-button",
@@ -143,10 +144,7 @@ carousel.initialize().catch((err) => {
 let statusPollingId: number | null = null;
 let recordingsPanel: RecordingsPanel | null = null;
 
-function updateRecordButton(
-  recording: boolean,
-  finalizing: boolean = false,
-): void {
+function updateRecordButton(recording: boolean, finalizing = false): void {
   if (!recordButton) return;
   recordButton.ariaPressed = String(recording || finalizing);
   recordButton.classList.toggle("recording", recording);

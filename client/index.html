@@ -23,17 +23,30 @@
     </header>
 
     <main>
-      <div id="container" class="container"></div>
-      <div class="carousel-nav"></div>
-    </main>
+      <!-- Camera View -->
+      <div id="camera-view" class="view active">
+        <div id="container" class="container"></div>
+        <div class="carousel-nav"></div>
+      </div>
 
-    <dialog id="recordings-panel" class="recordings-dialog">
-      <header class="dialog-header">
-        <h2>Recordings</h2>
-        <button class="close-btn" aria-label="Close">&times;</button>
-      </header>
-      <div class="recordings-list"></div>
-    </dialog>
+      <!-- Recordings View -->
+      <div id="recordings-view" class="view">
+        <header class="view-header">
+          <button id="recordings-back" class="back-btn" aria-label="Back to cameras">
+            <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+              <polyline points="15 18 9 12 15 6"></polyline>
+            </svg>
+            <span>Cameras</span>
+          </button>
+          <h2>Recordings</h2>
+          <div class="view-header-spacer"></div>
+        </header>
+        <div class="recordings-content">
+          <div class="recordings-loading">Loading recordings...</div>
+          <div class="recordings-list"></div>
+        </div>
+      </div>
+    </main>
 
     <script type="module" src="/src/main.ts"></script>
   </body>

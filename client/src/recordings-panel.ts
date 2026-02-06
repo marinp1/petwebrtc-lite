@@ -16,44 +16,64 @@ interface CameraRecordings {
 }
 
 export class RecordingsPanel {
-  private dialog: HTMLDialogElement;
+  private cameraView: HTMLElement;
+  private recordingsView: HTMLElement;
   private listContainer: HTMLDivElement;
+  private loadingElement: HTMLElement;
+  private backButton: HTMLElement;
   private refreshInterval: number | null = null;
   private cameraCount: number;
+  private isVisible = false;
+  private onCloseCallback: (() => void) | null = null;
 
   constructor(cameraCount: number) {
     this.cameraCount = cameraCount;
-    this.dialog = document.getElementById(
-      "recordings-panel",
-    ) as HTMLDialogElement;
-    this.listContainer = this.dialog.querySelector(
+    this.cameraView = document.getElementById("camera-view")!;
+    this.recordingsView = document.getElementById("recordings-view")!;
+    this.listContainer = this.recordingsView.querySelector(
       ".recordings-list",
     ) as HTMLDivElement;
+    this.loadingElement = this.recordingsView.querySelector(
+      ".recordings-loading",
+    ) as HTMLElement;
+    this.backButton = document.getElementById("recordings-back")!;
 
-    // Close button handler
-    const closeButton = this.dialog.querySelector(".close-btn");
-    if (closeButton) {
-      closeButton.addEventListener("click", () => this.close());
-    }
+    // Back button handler
+    this.backButton.addEventListener("click", () => this.close());
 
-    // Close on backdrop click
-    this.dialog.addEventListener("click", (e) => {
-      if (e.target === this.dialog) {
-        this.close();
-      }
-    });
-
-    // Close on escape key
-    this.dialog.addEventListener("keydown", (e) => {
-      if (e.key === "Escape") {
+    // Escape key to close
+    document.addEventListener("keydown", (e) => {
+      if (e.key === "Escape" && this.isVisible) {
         this.close();
       }
     });
   }
 
+  /**
+   * Register a callback to be called when the panel closes
+   */
+  onClose(callback: () => void): void {
+    this.onCloseCallback = callback;
+  }
+
   async open(): Promise<void> {
-    this.dialog.showModal();
+    if (this.isVisible) return;
+
+    this.isVisible = true;
+
+    // Show loading state
+    this.loadingElement.style.display = "block";
+    this.listContainer.innerHTML = "";
+
+    // Switch views
+    this.cameraView.classList.remove("active");
+    this.recordingsView.classList.add("active");
+
+    // Fetch data
     await this.refresh();
+
+    // Hide loading
+    this.loadingElement.style.display = "none";
 
     // Auto-refresh every 5 seconds while open
     this.refreshInterval = window.setInterval(() => {
@@ -62,11 +82,23 @@ export class RecordingsPanel {
   }
 
   close(): void {
+    if (!this.isVisible) return;
+
+    this.isVisible = false;
+
     if (this.refreshInterval) {
       clearInterval(this.refreshInterval);
       this.refreshInterval = null;
     }
-    this.dialog.close();
+
+    // Switch views back
+    this.recordingsView.classList.remove("active");
+    this.cameraView.classList.add("active");
+
+    // Notify listeners
+    if (this.onCloseCallback) {
+      this.onCloseCallback();
+    }
   }
 
   async refresh(): Promise<void> {
@@ -89,13 +121,13 @@ export class RecordingsPanel {
               error: err instanceof Error ? err.message : String(err),
             };
           }
-        })
+        }),
       );
 
       this.renderList(cameraRecordings);
     } catch (err) {
       console.error("Failed to fetch recordings:", err);
-      this.listContainer.innerHTML = `<p class="error">Failed to load recordings</p>`;
+      this.listContainer.innerHTML = `<p class="recordings-error">Failed to load recordings</p>`;
     }
   }
 
@@ -105,19 +137,19 @@ export class RecordingsPanel {
     // Count total recordings
     const totalRecordings = cameraRecordings.reduce(
       (sum, cam) => sum + cam.recordings.length,
-      0
+      0,
     );
 
     // Check if any camera has recording available
-    const anyAvailable = cameraRecordings.some(cam => cam.available);
+    const anyAvailable = cameraRecordings.some((cam) => cam.available);
 
     if (!anyAvailable) {
-      this.listContainer.innerHTML = `<p class="empty">Recording not available on any camera</p>`;
+      this.listContainer.innerHTML = `<p class="recordings-empty">Recording not available on any camera</p>`;
       return;
     }
 
     if (totalRecordings === 0) {
-      this.listContainer.innerHTML = `<p class="empty">No recordings found</p>`;
+      this.listContainer.innerHTML = `<p class="recordings-empty">No recordings found</p>`;
       return;
     }
 
@@ -125,11 +157,11 @@ export class RecordingsPanel {
     for (const camData of cameraRecordings) {
       if (!camData.available) {
         // Show unavailable camera
-        const section = document.createElement("div");
-        section.className = "camera-recordings-section";
+        const section = document.createElement("section");
+        section.className = "camera-section";
         section.innerHTML = `
-          <h3>Camera ${camData.cameraIndex + 1}</h3>
-          <p class="unavailable">Recording not available</p>
+          <h3 class="camera-section-title">Camera ${camData.cameraIndex + 1}</h3>
+          <p class="camera-unavailable">Recording not available</p>
         `;
         this.listContainer.appendChild(section);
         continue;
@@ -137,48 +169,39 @@ export class RecordingsPanel {
 
       if (camData.recordings.length === 0) {
         // Show camera with no recordings
-        const section = document.createElement("div");
-        section.className = "camera-recordings-section";
+        const section = document.createElement("section");
+        section.className = "camera-section";
         section.innerHTML = `
-          <h3>Camera ${camData.cameraIndex + 1}</h3>
-          <p class="empty-camera">No recordings</p>
+          <h3 class="camera-section-title">Camera ${camData.cameraIndex + 1}</h3>
+          <p class="camera-empty">No recordings</p>
         `;
         this.listContainer.appendChild(section);
         continue;
       }
 
       // Show camera with recordings
-      const section = document.createElement("div");
-      section.className = "camera-recordings-section";
+      const section = document.createElement("section");
+      section.className = "camera-section";
 
       const header = document.createElement("h3");
+      header.className = "camera-section-title";
       header.textContent = `Camera ${camData.cameraIndex + 1} (${camData.recordings.length})`;
       section.appendChild(header);
 
       // Sort by creation date, newest first
       const sortedRecordings = [...camData.recordings].sort(
-        (a, b) => b.createdAt - a.createdAt
+        (a, b) => b.createdAt - a.createdAt,
       );
 
-      const table = document.createElement("table");
-      table.className = "recordings-table";
+      // Create recording cards
+      const cardList = document.createElement("div");
+      cardList.className = "recording-cards";
 
-      // Header
-      const thead = document.createElement("thead");
-      thead.innerHTML = `
-        <tr>
-          <th>Date</th>
-          <th>Duration</th>
-          <th>Size</th>
-          <th>Download</th>
-        </tr>
-      `;
-      table.appendChild(thead);
-
-      // Body
-      const tbody = document.createElement("tbody");
       for (const recording of sortedRecordings) {
-        const row = document.createElement("tr");
+        const card = document.createElement("a");
+        card.className = "recording-card";
+        card.href = getDownloadUrl(camData.cameraIndex, recording.filename);
+        card.download = recording.filename;
 
         // Parse date from filename or use createdAt
         const date =
@@ -193,18 +216,21 @@ export class RecordingsPanel {
         // Size
         const sizeStr = formatBytes(recording.sizeBytes);
 
-        row.innerHTML = `
-          <td>${dateStr}</td>
-          <td>${durationStr}</td>
-          <td>${sizeStr}</td>
-          <td><a href="${getDownloadUrl(camData.cameraIndex, recording.filename)}" class="download-link" download>Download</a></td>
+        card.innerHTML = `
+          <div class="recording-card-main">
+            <span class="recording-date">${dateStr}</span>
+            <span class="recording-duration">${durationStr}</span>
+          </div>
+          <div class="recording-card-meta">
+            <span class="recording-size">${sizeStr}</span>
+            <span class="recording-download">Download</span>
+          </div>
         `;
 
-        tbody.appendChild(row);
+        cardList.appendChild(card);
       }
-      table.appendChild(tbody);
 
-      section.appendChild(table);
+      section.appendChild(cardList);
       this.listContainer.appendChild(section);
     }
   }
