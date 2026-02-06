@@ -22,7 +22,8 @@ type RecorderManager struct {
 	finalizing     atomic.Bool // Set during MP4 conversion
 	file           *os.File
 	writer         *bufio.Writer // Buffered writer to reduce syscalls
-	h264Path       string        // Path to raw .h264 file during recording
+	tempH264Path   string        // Path to raw .h264 file during recording
+	finalH264Path  string        // Path after rename when recording complete
 	filePath       string        // Path to final .mp4 file
 	skipConversion bool
 
@@ -93,12 +94,14 @@ func (rm *RecorderManager) Start() (*RecordingStatus, error) {
 
 	// Generate filenames with timestamp
 	timestamp := time.Now().Format("20060102_150405")
-	h264Filename := fmt.Sprintf("recording_%s.h264", timestamp)
-	rm.h264Path = filepath.Join(rm.recordingDir, h264Filename)
+	h264FinalFilename := fmt.Sprintf("recording_%s.h264", timestamp)
+	h264TemporaryFilename := fmt.Sprintf("%s.tmp", h264FinalFilename)
+	rm.finalH264Path = filepath.Join(rm.recordingDir, h264FinalFilename)
+	rm.tempH264Path = filepath.Join(rm.recordingDir, h264TemporaryFilename)
 	rm.filePath = filepath.Join(rm.recordingDir, fmt.Sprintf("recording_%s.mp4", timestamp))
 
 	// Create .h264 file for raw recording
-	file, err := os.Create(rm.h264Path)
+	file, err := os.Create(rm.tempH264Path)
 	if err != nil {
 		return nil, fmt.Errorf("failed to create file: %w", err)
 	}
@@ -152,11 +155,16 @@ func (rm *RecorderManager) Stop() (*RecordingStatus, error) {
 		rm.file = nil
 	}
 
-	log.Printf("Recording stopped: %s (%d bytes, %dms)", filepath.Base(rm.h264Path), status.BytesWritten, status.DurationMs)
-
 	// Set finalizing state (mutex still held, prevents new recordings)
 	rm.finalizing.Store(true)
 	defer rm.finalizing.Store(false)
+
+	// Rename the temp files
+	if err := os.Rename(rm.tempH264Path, rm.finalH264Path); err != nil {
+		return nil, fmt.Errorf("failed to rename file: %w (file %s)", err, rm.tempH264Path)
+	}
+
+	log.Printf("Recording stopped: %s (%d bytes, %dms)", filepath.Base(rm.finalH264Path), status.BytesWritten, status.DurationMs)
 
 	// If conversion is skipped, return here
 	if rm.skipConversion {
@@ -171,7 +179,7 @@ func (rm *RecorderManager) Stop() (*RecordingStatus, error) {
 		// Keep the .h264 file if conversion fails
 	} else {
 		// Conversion successful, delete the .h264 file
-		os.Remove(rm.h264Path)
+		os.Remove(rm.finalH264Path)
 		log.Printf("MP4 finalized: %s", filepath.Base(rm.filePath))
 
 		// Write metadata file
@@ -192,7 +200,7 @@ func (rm *RecorderManager) Stop() (*RecordingStatus, error) {
 func (rm *RecorderManager) convertToMP4() error {
 	cmd := exec.Command("ffmpeg",
 		"-f", "h264",
-		"-i", rm.h264Path,
+		"-i", rm.finalH264Path,
 		"-c:v", "copy",
 		"-movflags", "+faststart",
 		"-y",
@@ -393,7 +401,7 @@ func (rm *RecorderManager) Shutdown() {
 			rm.file.Close()
 			rm.file = nil
 		}
-		log.Printf("Recording aborted during shutdown: %s", rm.h264Path)
+		log.Printf("Recording aborted during shutdown: %s", rm.tempH264Path)
 	}
 	rm.mu.Unlock()
 
