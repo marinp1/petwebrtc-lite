@@ -21,7 +21,7 @@
           "editor.defaultFormatter": "biomejs.biome"
         }
       },
-      "extensions": ["golang.go", "biomejs.biome"]
+      "extensions": ["golang.go", "biomejs.biome", "anthropic.claude-code"]
     }
   },
   "postStartCommand": "./install.sh"
