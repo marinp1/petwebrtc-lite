@@ -8,6 +8,7 @@ import (
 	"os/exec"
 	"strconv"
 	"strings"
+	"time"
 )
 
 type ServerConfig struct {
@@ -147,40 +148,65 @@ func (c *ServerConfig) Validate() {
 
 	// Validate recording directory if set
 	if c.RecordingDir != "" {
-		info, err := os.Stat(c.RecordingDir)
-		if err != nil {
-			log.Printf("WARNING: Recording directory %q does not exist or is not accessible: %v", c.RecordingDir, err)
-			c.RecordingUnavailableReason = fmt.Sprintf("Directory does not exist or is not accessible: %v", err)
-			c.RecordingDir = "" // Disable recording
-		} else if !info.IsDir() {
-			log.Printf("WARNING: Recording path %q is not a directory", c.RecordingDir)
-			c.RecordingUnavailableReason = "Path is not a directory"
-			c.RecordingDir = "" // Disable recording
-		} else {
-			// Test if writable by creating a temp file
-			testFile := c.RecordingDir + "/.write_test"
-			if f, err := os.Create(testFile); err != nil {
-				log.Printf("WARNING: Recording directory %q is not writable: %v", c.RecordingDir, err)
-				c.RecordingUnavailableReason = fmt.Sprintf("Directory is not writable: %v", err)
-				c.RecordingDir = "" // Disable recording
-			} else {
-				f.Close()
-				os.Remove(testFile)
-
-				// Check if ffmpeg is available (required for MP4 muxing)
-				if err := checkFFmpegAvailable(c); err != nil {
-					log.Printf("WARNING: ffmpeg not available: %v", err)
-					c.RecordingUnavailableReason = fmt.Sprintf("ffmpeg not available: %v", err)
-					c.RecordingDir = "" // Disable recording
-				} else {
-					log.Printf("Recording enabled: %s (using ffmpeg for MP4 muxing)", c.RecordingDir)
-				}
-			}
-		}
+		c.validateRecordingDir()
 	} else {
 		// No recording directory configured
 		c.RecordingUnavailableReason = "No recording_dir configured"
 	}
+}
+
+// validateRecordingDir validates the recording directory, retrying if the directory
+// is not yet accessible (e.g. NFS mount not ready at boot). Retries up to 5 times
+// with 2-second intervals before giving up.
+func (c *ServerConfig) validateRecordingDir() {
+	const maxRetries = 5
+	const retryInterval = 2 * time.Second
+
+	for attempt := 1; attempt <= maxRetries; attempt++ {
+		reason := c.tryRecordingDir()
+		if reason == "" {
+			log.Printf("Recording enabled: %s (using ffmpeg for MP4 muxing)", c.RecordingDir)
+			c.RecordingUnavailableReason = ""
+			return
+		}
+
+		if attempt < maxRetries {
+			log.Printf("Recording directory not ready (attempt %d/%d): %s — retrying in %v", attempt, maxRetries, reason, retryInterval)
+			time.Sleep(retryInterval)
+		} else {
+			log.Printf("WARNING: Recording directory not ready after %d attempts: %s", maxRetries, reason)
+			c.RecordingUnavailableReason = reason
+			c.RecordingDir = "" // Disable recording
+		}
+	}
+}
+
+// tryRecordingDir checks if the recording directory is accessible and writable.
+// Returns an empty string on success, or a reason string on failure.
+func (c *ServerConfig) tryRecordingDir() string {
+	info, err := os.Stat(c.RecordingDir)
+	if err != nil {
+		return fmt.Sprintf("Directory does not exist or is not accessible: %v", err)
+	}
+	if !info.IsDir() {
+		return "Path is not a directory"
+	}
+
+	// Test if writable by creating a temp file
+	testFile := c.RecordingDir + "/.write_test"
+	f, err := os.Create(testFile)
+	if err != nil {
+		return fmt.Sprintf("Directory is not writable: %v", err)
+	}
+	f.Close()
+	os.Remove(testFile)
+
+	// Check if ffmpeg is available (required for MP4 muxing)
+	if err := checkFFmpegAvailable(c); err != nil {
+		return fmt.Sprintf("ffmpeg not available: %v", err)
+	}
+
+	return ""
 }
 
 // String returns a formatted string representation of the config for logging
