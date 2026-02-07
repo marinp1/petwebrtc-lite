@@ -1,3 +1,4 @@
+import type { CameraInfo } from "./cameras";
 import {
   formatBytes,
   formatDate,
@@ -9,7 +10,7 @@ import {
 } from "./recording";
 
 interface CameraRecordings {
-  cameraIndex: number;
+  camera: CameraInfo;
   available: boolean;
   recordings: RecordingFile[];
   error?: string;
@@ -22,12 +23,12 @@ export class RecordingsPanel {
   private loadingElement: HTMLElement;
   private backButton: HTMLElement;
   private refreshInterval: number | null = null;
-  private cameraCount: number;
+  private cameras: CameraInfo[];
   private isVisible = false;
   private onCloseCallback: (() => void) | null = null;
 
-  constructor(cameraCount: number) {
-    this.cameraCount = cameraCount;
+  constructor(cameras: CameraInfo[]) {
+    this.cameras = cameras;
     this.cameraView = document.getElementById("camera-view")!;
     this.recordingsView = document.getElementById("recordings-view")!;
     this.listContainer = this.recordingsView.querySelector(
@@ -105,17 +106,17 @@ export class RecordingsPanel {
     try {
       // Fetch recordings from all cameras in parallel
       const cameraRecordings: CameraRecordings[] = await Promise.all(
-        Array.from({ length: this.cameraCount }, async (_, i) => {
+        this.cameras.map(async (camera) => {
           try {
-            const recordings = await listRecordings(i);
+            const recordings = await listRecordings(camera.endpoint);
             return {
-              cameraIndex: i,
+              camera,
               available: true,
               recordings,
             };
           } catch (err) {
             return {
-              cameraIndex: i,
+              camera,
               available: false,
               recordings: [],
               error: err instanceof Error ? err.message : String(err),
@@ -160,7 +161,7 @@ export class RecordingsPanel {
         const section = document.createElement("section");
         section.className = "camera-section";
         section.innerHTML = `
-          <h3 class="camera-section-title">Camera ${camData.cameraIndex + 1}</h3>
+          <h3 class="camera-section-title">${camData.camera.title}</h3>
           <p class="camera-unavailable">Recording not available</p>
         `;
         this.listContainer.appendChild(section);
@@ -172,7 +173,7 @@ export class RecordingsPanel {
         const section = document.createElement("section");
         section.className = "camera-section";
         section.innerHTML = `
-          <h3 class="camera-section-title">Camera ${camData.cameraIndex + 1}</h3>
+          <h3 class="camera-section-title">${camData.camera.title}</h3>
           <p class="camera-empty">No recordings</p>
         `;
         this.listContainer.appendChild(section);
@@ -185,7 +186,7 @@ export class RecordingsPanel {
 
       const header = document.createElement("h3");
       header.className = "camera-section-title";
-      header.textContent = `Camera ${camData.cameraIndex + 1} (${camData.recordings.length})`;
+      header.textContent = `${camData.camera.title} (${camData.recordings.length})`;
       section.appendChild(header);
 
       // Sort by creation date, newest first
@@ -200,7 +201,7 @@ export class RecordingsPanel {
       for (const recording of sortedRecordings) {
         const card = document.createElement("a");
         card.className = "recording-card";
-        card.href = getDownloadUrl(camData.cameraIndex, recording.filename);
+        card.href = getDownloadUrl(camData.camera.endpoint, recording.filename);
         card.download = recording.filename;
 
         // Parse date from filename or use createdAt

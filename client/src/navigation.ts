@@ -40,7 +40,7 @@ export class NavigationUI {
       dot.className = "indicator-dot";
       dot.type = "button";
       dot.setAttribute("role", "tab");
-      dot.setAttribute("aria-label", `Camera ${i + 1}`);
+      dot.setAttribute("aria-label", this.carousel.getCamera(i).title);
       dot.setAttribute(
         "aria-selected",
         i === this.carousel.getCurrentIndex() ? "true" : "false",
@@ -226,6 +226,6 @@ export class NavigationUI {
     }
 
     // Announce the change
-    liveRegion.textContent = `Showing Camera ${currentIndex + 1} of ${this.carousel.getCameraCount()}`;
+    liveRegion.textContent = `Showing ${this.carousel.getCamera(currentIndex).title} (${currentIndex + 1} of ${this.carousel.getCameraCount()})`;
   }
 }

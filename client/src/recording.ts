@@ -21,9 +21,9 @@ export interface RecordingFile {
 
 // Get current recording status
 export async function getRecordingStatus(
-  cameraIndex: number,
+  endpoint: string,
 ): Promise<RecordingStatus> {
-  const response = await fetch(`/camera${cameraIndex + 1}/record/status`, {
+  const response = await fetch(`${endpoint}/record/status`, {
     method: "GET",
   });
   if (!response.ok) {
@@ -34,9 +34,9 @@ export async function getRecordingStatus(
 
 // Start recording
 export async function startRecording(
-  cameraIndex: number,
+  endpoint: string,
 ): Promise<RecordingStatus> {
-  const response = await fetch(`/camera${cameraIndex + 1}/record/start`, {
+  const response = await fetch(`${endpoint}/record/start`, {
     method: "POST",
   });
   if (!response.ok) {
@@ -50,9 +50,9 @@ export async function startRecording(
 
 // Stop recording
 export async function stopRecording(
-  cameraIndex: number,
+  endpoint: string,
 ): Promise<RecordingStatus> {
-  const response = await fetch(`/camera${cameraIndex + 1}/record/stop`, {
+  const response = await fetch(`${endpoint}/record/stop`, {
     method: "POST",
   });
   if (!response.ok) {
@@ -66,9 +66,9 @@ export async function stopRecording(
 
 // List all recordings
 export async function listRecordings(
-  cameraIndex: number,
+  endpoint: string,
 ): Promise<RecordingFile[]> {
-  const response = await fetch(`/camera${cameraIndex + 1}/record/list`, {
+  const response = await fetch(`${endpoint}/record/list`, {
     method: "GET",
   });
   if (!response.ok) {
@@ -79,8 +79,8 @@ export async function listRecordings(
 }
 
 // Get download URL for a recording
-export function getDownloadUrl(cameraIndex: number, filename: string): string {
-  return `/camera${cameraIndex + 1}/record/download/${encodeURIComponent(filename)}`;
+export function getDownloadUrl(endpoint: string, filename: string): string {
+  return `${endpoint}/record/download/${encodeURIComponent(filename)}`;
 }
 
 // Format duration for display (MM:SS or HH:MM:SS)

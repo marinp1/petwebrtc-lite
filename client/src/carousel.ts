@@ -1,3 +1,4 @@
+import type { CameraInfo } from "./cameras";
 import { startStream } from "./connect";
 import { getStorage, setStorage } from "./storage";
 
@@ -11,18 +12,18 @@ interface VideoElements {
 
 export class Carousel {
   private currentIndex: number = 0;
-  private cameraCount: number;
+  private cameras: CameraInfo[];
   private isTransitioning: boolean = false;
   private videoElements: Map<number, VideoElements> = new Map();
   private connections: Map<number, RTCPeerConnection> = new Map();
   private onIndexChangeCallbacks: Array<(index: number) => void> = [];
 
-  constructor(cameraCount: number, _container: HTMLElement) {
-    this.cameraCount = cameraCount;
+  constructor(cameras: CameraInfo[], _container: HTMLElement) {
+    this.cameras = cameras;
 
     // Restore last viewed camera from localStorage
     const stored = getStorage().currentCameraIndex;
-    if (stored !== null && stored >= 0 && stored < cameraCount) {
+    if (stored !== null && stored >= 0 && stored < cameras.length) {
       this.currentIndex = stored;
     } else {
       this.currentIndex = 0;
@@ -56,7 +57,14 @@ export class Carousel {
    * Get total camera count
    */
   getCameraCount(): number {
-    return this.cameraCount;
+    return this.cameras.length;
+  }
+
+  /**
+   * Get camera info for a given index
+   */
+  getCamera(index: number): CameraInfo {
+    return this.cameras[index];
   }
 
   /**
@@ -70,7 +78,7 @@ export class Carousel {
    * Navigate to the next camera
    */
   async next(): Promise<void> {
-    if (this.isTransitioning || this.currentIndex >= this.cameraCount - 1) {
+    if (this.isTransitioning || this.currentIndex >= this.cameras.length - 1) {
       return;
     }
     await this.transitionTo(this.currentIndex + 1);
@@ -93,7 +101,7 @@ export class Carousel {
     if (
       this.isTransitioning ||
       index < 0 ||
-      index >= this.cameraCount ||
+      index >= this.cameras.length ||
       index === this.currentIndex
     ) {
       return;
@@ -202,9 +210,10 @@ export class Carousel {
 
     try {
       // Start WebRTC stream
+      const camera = this.cameras[index];
       const pc = await startStream({
-        url: `/camera${index + 1}`,
-        name: `Camera ${index + 1}`,
+        url: camera.endpoint,
+        name: camera.title,
         videoElement: elements.videoElement,
         connectionElement: elements.connectionElement,
         droppedElement: elements.droppedElement,
@@ -235,7 +244,7 @@ export class Carousel {
     }
 
     // Preload next camera
-    if (currentIndex < this.cameraCount - 1) {
+    if (currentIndex < this.cameras.length - 1) {
       this.ensureConnection(currentIndex + 1).catch((err) => {
         console.warn(`Failed to preload camera ${currentIndex + 2}:`, err);
       });
@@ -294,6 +303,6 @@ export class Carousel {
    * Check if we're at the last camera (used for bounce effect)
    */
   isAtEnd(): boolean {
-    return this.currentIndex === this.cameraCount - 1;
+    return this.currentIndex === this.cameras.length - 1;
   }
 }

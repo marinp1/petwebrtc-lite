@@ -15,6 +15,11 @@ export default defineConfig(({ mode }) => {
     dev: {},
     server: {
       proxy: {
+        "/cameras": {
+          target: VITE_PROXY_TARGET,
+          changeOrigin: true,
+          secure: false,
+        },
         "^/camera*": {
           target: VITE_PROXY_TARGET,
           changeOrigin: true,

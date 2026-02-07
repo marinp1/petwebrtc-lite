@@ -1,6 +1,6 @@
 import "./style.css";
 
-import { getCameraCount } from "./cameras";
+import { getCameras } from "./cameras";
 import { Carousel } from "./carousel";
 import { SwipeGestureHandler } from "./gestures";
 import { NavigationUI } from "./navigation";
@@ -13,8 +13,8 @@ import {
 import { RecordingsPanel } from "./recordings-panel";
 import { getStorage, setStorage } from "./storage";
 
-const cameraCount = await getCameraCount();
-console.log("Found", cameraCount, "cameras");
+const cameras = await getCameras();
+console.log("Found", cameras.length, "cameras");
 
 const cameraView = document.getElementById("camera-view")!;
 const container = cameraView.querySelector<HTMLDivElement>(".container")!;
@@ -28,7 +28,7 @@ const recordingsButton = document.getElementById(
 ) as HTMLButtonElement | null;
 
 // Initialize carousel
-const carousel = new Carousel(cameraCount, container);
+const carousel = new Carousel(cameras, container);
 
 // Apply semantic button state & text for detection toggle
 {
@@ -47,12 +47,13 @@ recognisitionButton.onclick = (ev) => {
 };
 
 // Create video elements and register with carousel
-for (let i = 0; i < cameraCount; i++) {
+for (let i = 0; i < cameras.length; i++) {
+  const camera = cameras[i];
   const videoElement = document.createElement("video");
   videoElement.autoplay = true;
   videoElement.playsInline = true;
   videoElement.controls = true;
-  videoElement.title = `Camera ${i + 1}`;
+  videoElement.title = camera.title;
   videoElement.className = "camera-video";
 
   // Connection status banner (for prominent state display)
@@ -105,7 +106,7 @@ for (let i = 0; i < cameraCount; i++) {
   // title overlay (visible on the video)
   const titleElement = document.createElement("span");
   titleElement.className = "badge title";
-  titleElement.textContent = `Camera ${i + 1}`;
+  titleElement.textContent = camera.title;
   titleElement.setAttribute("aria-hidden", "true");
 
   // media wrapper to control aspect ratio
@@ -164,8 +165,8 @@ function startStatusPolling(): void {
 
   statusPollingId = window.setInterval(async () => {
     try {
-      const currentCameraIndex = carousel.getCurrentIndex();
-      const status = await getRecordingStatus(currentCameraIndex);
+      const currentCamera = carousel.getCamera(carousel.getCurrentIndex());
+      const status = await getRecordingStatus(currentCamera.endpoint);
       updateRecordButton(status.recording, status.finalizing);
 
       // Update duration display while recording
@@ -197,16 +198,13 @@ async function initRecording(): Promise<void> {
   if (!recordButton || !recordingsButton) return;
   try {
     // Check recording availability on all cameras
-    const availabilityChecks = [];
-    for (let i = 0; i < cameraCount; i++) {
-      availabilityChecks.push(
-        getRecordingStatus(i).catch(() => ({
-          available: false,
-          recording: false,
-          finalizing: false,
-        })),
-      );
-    }
+    const availabilityChecks = cameras.map((cam) =>
+      getRecordingStatus(cam.endpoint).catch(() => ({
+        available: false,
+        recording: false,
+        finalizing: false,
+      })),
+    );
 
     const statuses = await Promise.all(availabilityChecks);
     const availableCameras = statuses.filter((s) => s.available).length;
@@ -224,12 +222,14 @@ async function initRecording(): Promise<void> {
 
     // Function to update recording button for current camera
     const updateForCurrentCamera = async () => {
-      const currentCameraIndex = carousel.getCurrentIndex();
-      const status = await getRecordingStatus(currentCameraIndex).catch(() => ({
-        available: false,
-        recording: false,
-        finalizing: false,
-      }));
+      const currentCamera = carousel.getCamera(carousel.getCurrentIndex());
+      const status = await getRecordingStatus(currentCamera.endpoint).catch(
+        () => ({
+          available: false,
+          recording: false,
+          finalizing: false,
+        }),
+      );
 
       // Hide/show button based on current camera's support
       recordButton.style.display = status.available ? "" : "none";
@@ -253,15 +253,17 @@ async function initRecording(): Promise<void> {
       recordButton.disabled = true;
 
       try {
-        const currentCameraIndex = carousel.getCurrentIndex();
-        const currentStatus = await getRecordingStatus(currentCameraIndex);
+        const currentEndpoint = carousel.getCamera(
+          carousel.getCurrentIndex(),
+        ).endpoint;
+        const currentStatus = await getRecordingStatus(currentEndpoint);
 
         if (currentStatus.recording) {
-          await stopRecording(currentCameraIndex);
+          await stopRecording(currentEndpoint);
           // Don't update button yet - wait for status polling to show finalization
           startStatusPolling(); // Continue polling to show "Finalizing MP4..."
         } else {
-          await startRecording(currentCameraIndex);
+          await startRecording(currentEndpoint);
           updateRecordButton(true);
           startStatusPolling();
         }
@@ -274,7 +276,7 @@ async function initRecording(): Promise<void> {
     };
 
     // Initialize recordings panel
-    recordingsPanel = new RecordingsPanel(cameraCount);
+    recordingsPanel = new RecordingsPanel(cameras);
 
     // Update when camera changes
     carousel.onIndexChange(async () => {
