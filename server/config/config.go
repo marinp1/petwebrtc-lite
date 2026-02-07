@@ -22,6 +22,7 @@ type ServerConfig struct {
 	RecordingDir               string // Optional: directory for recording files (must exist and be writable)
 	RecordingUnavailableReason string // Reason why recording is unavailable (if RecordingDir is empty)
 	RecordingSkipConversion    bool   // Optional, if ffmpeg finalisation should be ignored
+	RecordingMaxMinutes        int    // Optional: max recording duration in minutes (1-480, default 60)
 }
 
 // ParseConfig loads configuration from the given file path (TOML-like, key=value per line).
@@ -36,6 +37,7 @@ func ParseConfig(path string) *ServerConfig {
 		Rotation:                180,
 		CorsOrigin:              "*",
 		RecordingSkipConversion: false,
+		RecordingMaxMinutes:     60,
 	}
 
 	f, err := os.Open(path)
@@ -88,6 +90,10 @@ func ParseConfig(path string) *ServerConfig {
 				conf.RecordingDir = val
 			case "recording_skip_conversion":
 				conf.RecordingSkipConversion = val == "true"
+			case "recording_max_minutes":
+				if v, err := strconv.Atoi(val); err == nil {
+					conf.RecordingMaxMinutes = v
+				}
 			}
 		}
 	}
@@ -144,6 +150,12 @@ func (c *ServerConfig) Validate() {
 	// Warn about insecure CORS setting
 	if c.CorsOrigin == "*" {
 		log.Println("WARNING: CORS origin set to '*' - this is insecure for production")
+	}
+
+	// Validate recording max duration (1-480 minutes)
+	if c.RecordingMaxMinutes < 1 || c.RecordingMaxMinutes > 480 {
+		log.Printf("WARNING: Invalid recording_max_minutes %d, using default 60", c.RecordingMaxMinutes)
+		c.RecordingMaxMinutes = 60
 	}
 
 	// Validate recording directory if set

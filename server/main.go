@@ -57,7 +57,7 @@ func main() {
 	// Initialize recorder if recording directory is configured
 	var recorder *internal.RecorderManager
 	if conf.RecordingDir != "" {
-		recorder = internal.NewRecorderManager(conf.RecordingDir, conf.RecordingSkipConversion)
+		recorder = internal.NewRecorderManager(conf.RecordingDir, conf.RecordingSkipConversion, conf.RecordingMaxMinutes)
 		clientManager.SetRecorder(recorder)
 		recorder.ProcessNALUs()
 		log.Printf("Recording initialized: %s", conf.RecordingDir)

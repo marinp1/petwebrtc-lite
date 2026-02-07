@@ -39,6 +39,9 @@ type RecorderManager struct {
 	lastSPS       []byte
 	lastPPS       []byte
 	waitingForIDR bool // Flag to wait for keyframe before writing
+
+	maxDuration time.Duration   // Maximum recording duration
+	stopTimer   *time.Timer     // Timer to auto-stop recording at max duration
 }
 
 // RecordingStatus represents the current recording state
@@ -50,6 +53,7 @@ type RecordingStatus struct {
 	FilePath          string `json:"filePath,omitempty"`
 	StartTime         int64  `json:"startTime,omitempty"`
 	DurationMs        int64  `json:"durationMs,omitempty"`
+	MaxDurationMs     int64  `json:"maxDurationMs"`               // Max recording duration in ms
 	BytesWritten      int64  `json:"bytesWritten,omitempty"`
 	FramesWritten     int64  `json:"framesWritten,omitempty"`
 }
@@ -69,10 +73,11 @@ type RecordingMeta struct {
 }
 
 // NewRecorderManager creates a new recorder instance
-func NewRecorderManager(recordingDir string, skipConversion bool) *RecorderManager {
+func NewRecorderManager(recordingDir string, skipConversion bool, maxMinutes int) *RecorderManager {
 	return &RecorderManager{
 		recordingDir:   recordingDir,
 		skipConversion: skipConversion,
+		maxDuration:    time.Duration(maxMinutes) * time.Minute,
 		naluChan:       make(chan []byte, 500), // Buffer for burst tolerance
 		done:           make(chan struct{}),
 	}
@@ -122,7 +127,15 @@ func (rm *RecorderManager) Start() (*RecordingStatus, error) {
 	rm.waitingForIDR = true
 	rm.recording.Store(true)
 
-	log.Printf("Recording started (.h264), waiting for keyframe...")
+	// Start auto-stop timer
+	rm.stopTimer = time.AfterFunc(rm.maxDuration, func() {
+		log.Printf("Recording reached max duration (%v), auto-stopping...", rm.maxDuration)
+		if _, err := rm.Stop(); err != nil {
+			log.Printf("Failed to auto-stop recording: %v", err)
+		}
+	})
+
+	log.Printf("Recording started (.h264), max duration %v, waiting for keyframe...", rm.maxDuration)
 	return rm.getStatusLocked(), nil
 }
 
@@ -141,6 +154,12 @@ func (rm *RecorderManager) Stop() (*RecordingStatus, error) {
 	}
 
 	rm.recording.Store(false)
+
+	// Cancel auto-stop timer if running
+	if rm.stopTimer != nil {
+		rm.stopTimer.Stop()
+		rm.stopTimer = nil
+	}
 
 	status := rm.getStatusLocked()
 
@@ -225,9 +244,10 @@ func (rm *RecorderManager) GetStatus() *RecordingStatus {
 
 func (rm *RecorderManager) getStatusLocked() *RecordingStatus {
 	status := &RecordingStatus{
-		Available:  true,
-		Recording:  rm.recording.Load(),
-		Finalizing: rm.finalizing.Load(),
+		Available:     true,
+		Recording:     rm.recording.Load(),
+		Finalizing:    rm.finalizing.Load(),
+		MaxDurationMs: rm.maxDuration.Milliseconds(),
 	}
 
 	if status.Recording {
@@ -388,6 +408,11 @@ func (rm *RecorderManager) Shutdown() {
 	rm.wg.Wait()
 
 	rm.mu.Lock()
+	// Cancel auto-stop timer if running
+	if rm.stopTimer != nil {
+		rm.stopTimer.Stop()
+		rm.stopTimer = nil
+	}
 	// If recording is in progress, flush and close the file
 	if rm.recording.Load() {
 		rm.recording.Store(false)

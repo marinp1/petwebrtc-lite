@@ -25,6 +25,7 @@ func HandleRecordStatus(w http.ResponseWriter, r *http.Request, recorder *Record
 			Available:         false,
 			Recording:         false,
 			UnavailableReason: unavailableReason,
+			MaxDurationMs:     0,
 		}
 	}
 

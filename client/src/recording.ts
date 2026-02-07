@@ -7,6 +7,7 @@ export interface RecordingStatus {
   filePath?: string;
   startTime?: number;
   durationMs?: number;
+  maxDurationMs: number; // Max recording duration in ms
   bytesWritten?: number;
   framesWritten?: number;
 }
