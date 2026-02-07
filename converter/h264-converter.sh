@@ -46,7 +46,9 @@ convert_file() {
     local ffmpeg_log=$(mktemp)
     if ffmpeg -f h264 \
               -i "$input" \
-              -c:v copy \
+              -c:v libx264 \
+              -crf 23 \
+              -preset fast \
               -movflags +faststart \
               -y \
               "$output" 2>"$ffmpeg_log"; then
